@@ -27,19 +27,23 @@ Requiere Python 3.12+.
 
 El flujo tiene tres etapas independientes. Cada una produce datasets versionados por `snapshot_date` y `run_ts_ms`.
 
-**1. Dimensiones geográficas** — pobla `data/dim/` con distritos, locales y departamentos.
+**1. Dimensiones geográficas** — pobla `data/dim/` con distritos, locales y departamentos. Cubre Perú + voto en el exterior (continentes → países → ciudades) en una sola pasada.
 
 ```bash
-uv run python scripts/crawl_dims.py
+uv run python scripts/crawl_dims.py              # ambos ámbitos (default)
+uv run python scripts/crawl_dims.py --solo-peru  # omite el exterior
 ```
 
-**2. Inventario de mesas** — descubre las ~92k mesas físicas iterando el listado `/actas` por distrito. Produce `data/dim/mesas.parquet`.
+Cada tabla incluye la columna `idAmbitoGeografico` (1 = Perú, 2 = exterior) para segregar sin ambigüedad; los ubigeos del exterior viven en el rango 91-95xxxx, así que no colisionan con los de Perú.
+
+**2. Inventario de mesas** — descubre las ~92k mesas físicas iterando el listado `/actas` por distrito (y por ciudad, en el exterior). Produce `data/dim/mesas.parquet`.
 
 ```bash
-uv run python scripts/crawl_mesas.py
+uv run python scripts/crawl_mesas.py              # ambos ámbitos (default)
+uv run python scripts/crawl_mesas.py --solo-peru  # omite el exterior
 ```
 
-Coste: ~1900 requests a 5 rps → ~7 min.
+Coste: Perú ~1874 distritos a 5 rps → ~7 min. Exterior ~210 ciudades → <1 min. Total ~2543 mesas del exterior se agregan a las de Perú.
 
 **3a. Agregados por snapshot** — descarga los totales, mapa de calor y resúmenes pre-computados por ONPE. Barato, ideal para correr en loop cada X minutos durante el conteo.
 

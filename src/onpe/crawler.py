@@ -25,6 +25,8 @@ import polars as pl
 
 from onpe.client import OnpeClient
 from onpe.endpoints import (
+    AMBITOS_TODOS,
+    AMBITO_PERU,
     ELECCION_PRESIDENCIAL,
     departamentos,
     distritos,
@@ -54,53 +56,57 @@ def _local_key(row: dict[str, Any]) -> int:
     raise KeyError(f"local sin codigo: keys={list(row.keys())}")
 
 
-async def crawl_hierarchy(
+async def _crawl_one_ambito(
     c: OnpeClient,
-    id_eleccion: int = ELECCION_PRESIDENCIAL,
-) -> dict[str, pl.DataFrame]:
-    """Crawlea los 5 niveles en orden y devuelve un dict {tabla: DataFrame}.
+    id_eleccion: int,
+    id_ambito: int,
+) -> dict[str, list[dict[str, Any]]]:
+    """Crawlea los 4 niveles bajo un mismo idAmbitoGeografico.
 
-    El id_eleccion afecta el filtrado de departamentos/provincias/distritos
-    (solo devuelve los que tienen actas asignadas a esa elección). Para un
-    catálogo completo usar la presidencial, que cubre todo el territorio.
+    Para ambito=2 la semántica cambia (continente→pais→ciudad) pero los
+    endpoints son los mismos y los ubigeos viven en un rango disjunto
+    (91-95xxxx), así que al concatenar ambos ambitos no hay colisión.
     """
-    de = await distritos_electorales(c)
-    df_de = pl.DataFrame(de)
-    log.info("distritos_electorales: %d", len(df_de))
+    deptos = await departamentos(c, id_eleccion, id_ambito)
+    for r in deptos:
+        r["idAmbitoGeografico"] = id_ambito
+    log.info("ambito=%d departamentos: %d", id_ambito, len(deptos))
 
-    deptos = await departamentos(c, id_eleccion)
-    df_deptos = pl.DataFrame(deptos)
-    log.info("departamentos: %d", len(df_deptos))
-
-    # Provincias en paralelo, una llamada por depto.
     depto_ubigeos = [_ubigeo_key(r) for r in deptos]
     provs_per_depto = await asyncio.gather(
-        *(provincias(c, id_eleccion, u) for u in depto_ubigeos)
+        *(provincias(c, id_eleccion, u, id_ambito) for u in depto_ubigeos)
     )
     provs_flat: list[dict[str, Any]] = []
     for u_depto, lst in zip(depto_ubigeos, provs_per_depto, strict=True):
         for r in lst:
-            provs_flat.append({**r, "ubigeoDepartamento": u_depto})
-    df_provs = pl.DataFrame(provs_flat)
-    log.info("provincias: %d", len(df_provs))
+            provs_flat.append(
+                {
+                    **r,
+                    "ubigeoDepartamento": u_depto,
+                    "idAmbitoGeografico": id_ambito,
+                }
+            )
+    log.info("ambito=%d provincias: %d", id_ambito, len(provs_flat))
 
-    # Distritos en paralelo, una llamada por provincia.
     prov_pairs = [
         (_ubigeo_key(r), r.get("ubigeoDepartamento")) for r in provs_flat
     ]
     dists_per_prov = await asyncio.gather(
-        *(distritos(c, id_eleccion, u) for u, _ in prov_pairs)
+        *(distritos(c, id_eleccion, u, id_ambito) for u, _ in prov_pairs)
     )
     dists_flat: list[dict[str, Any]] = []
     for (u_prov, u_depto), lst in zip(prov_pairs, dists_per_prov, strict=True):
         for r in lst:
             dists_flat.append(
-                {**r, "ubigeoProvincia": u_prov, "ubigeoDepartamento": u_depto}
+                {
+                    **r,
+                    "ubigeoProvincia": u_prov,
+                    "ubigeoDepartamento": u_depto,
+                    "idAmbitoGeografico": id_ambito,
+                }
             )
-    df_dists = pl.DataFrame(dists_flat)
-    log.info("distritos: %d", len(df_dists))
+    log.info("ambito=%d distritos: %d", id_ambito, len(dists_flat))
 
-    # Locales en paralelo, una llamada por distrito (~1874 requests).
     dist_triples = [
         (
             _ubigeo_key(r),
@@ -109,6 +115,7 @@ async def crawl_hierarchy(
         )
         for r in dists_flat
     ]
+    # `locales` no depende de ambito — acepta cualquier ubigeo.
     locales_per_dist = await asyncio.gather(
         *(locales(c, u) for u, _, _ in dist_triples)
     )
@@ -123,26 +130,61 @@ async def crawl_hierarchy(
                     "ubigeoDistrito": u_dist,
                     "ubigeoProvincia": u_prov,
                     "ubigeoDepartamento": u_depto,
+                    "idAmbitoGeografico": id_ambito,
                 }
             )
-    df_locales = pl.DataFrame(locales_flat)
-    log.info("locales: %d", len(df_locales))
+    log.info("ambito=%d locales: %d", id_ambito, len(locales_flat))
+
+    return {
+        "departamentos": deptos,
+        "provincias": provs_flat,
+        "distritos": dists_flat,
+        "locales": locales_flat,
+    }
+
+
+async def crawl_hierarchy(
+    c: OnpeClient,
+    id_eleccion: int = ELECCION_PRESIDENCIAL,
+    ambitos: tuple[int, ...] = AMBITOS_TODOS,
+) -> dict[str, pl.DataFrame]:
+    """Crawlea los 5 niveles sobre los ambitos indicados.
+
+    El id_eleccion afecta el filtrado: solo devuelve niveles con actas
+    asignadas a esa elección. Para un catálogo completo usar la presidencial.
+    `ambitos` controla si se crawlea Perú, extranjero o ambos.
+    """
+    de = await distritos_electorales(c)
+    df_de = pl.DataFrame(de)
+    log.info("distritos_electorales: %d", len(df_de))
+
+    merged: dict[str, list[dict[str, Any]]] = {
+        "departamentos": [],
+        "provincias": [],
+        "distritos": [],
+        "locales": [],
+    }
+    for amb in ambitos:
+        one = await _crawl_one_ambito(c, id_eleccion, amb)
+        for k, rows in one.items():
+            merged[k].extend(rows)
 
     return {
         "distritos_electorales": df_de,
-        "departamentos": df_deptos,
-        "provincias": df_provs,
-        "distritos": df_dists,
-        "locales": df_locales,
+        "departamentos": pl.DataFrame(merged["departamentos"]),
+        "provincias": pl.DataFrame(merged["provincias"]),
+        "distritos": pl.DataFrame(merged["distritos"]),
+        "locales": pl.DataFrame(merged["locales"]),
     }
 
 
 async def crawl_and_persist(
     c: OnpeClient,
     id_eleccion: int = ELECCION_PRESIDENCIAL,
+    ambitos: tuple[int, ...] = AMBITOS_TODOS,
 ) -> dict[str, str]:
     """Crawlea y escribe cada tabla a `data/dim/<tabla>.parquet`."""
-    tables = await crawl_hierarchy(c, id_eleccion)
+    tables = await crawl_hierarchy(c, id_eleccion, ambitos)
     paths: dict[str, str] = {}
     for name, df in tables.items():
         path = write_dim(name, df)

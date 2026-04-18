@@ -24,7 +24,12 @@ from typing import Any
 import polars as pl
 
 from onpe.client import OnpeClient
-from onpe.endpoints import ELECCION_PRESIDENCIAL, listar_actas
+from onpe.endpoints import (
+    AMBITOS_TODOS,
+    AMBITO_PERU,
+    ELECCION_PRESIDENCIAL,
+    listar_actas,
+)
 from onpe.storage import DIM_DIR, write_dim
 
 log = logging.getLogger(__name__)
@@ -39,6 +44,7 @@ async def _paginate_distrito(
     id_eleccion: int,
     ubigeo_dist: str,
     codigo_local_gatillo: int,
+    id_ambito: int = AMBITO_PERU,
 ) -> list[dict[str, Any]]:
     """Paginación completa del listado para un distrito (local como gatillo)."""
     rows: list[dict[str, Any]] = []
@@ -51,6 +57,7 @@ async def _paginate_distrito(
             codigo_local_gatillo,
             pagina=pagina,
             tamanio=PAGE_SIZE,
+            id_ambito=id_ambito,
         )
         # Cuando la API responde 204 (o algo que cayó al fallback del cliente),
         # data puede ser None. Tratamos como distrito sin mesas.
@@ -68,11 +75,13 @@ async def crawl_mesas(
     c: OnpeClient,
     id_eleccion: int = ELECCION_PRESIDENCIAL,
     concurrency: int = 5,
+    ambitos: tuple[int, ...] = AMBITOS_TODOS,
 ) -> pl.DataFrame:
     """Descubre el universo de mesas iterando distrito × primer-local.
 
     Precondición: dim/distritos.parquet y dim/locales.parquet ya existen.
-    Se generan con scripts/crawl_dims.py.
+    Se generan con scripts/crawl_dims.py. Ambas tablas deben incluir la
+    columna `idAmbitoGeografico` para segregar Perú vs exterior.
     """
     dist_path = DIM_DIR / "distritos.parquet"
     loc_path = DIM_DIR / "locales.parquet"
@@ -84,11 +93,26 @@ async def crawl_mesas(
     df_dist = pl.read_parquet(dist_path)
     df_loc = pl.read_parquet(loc_path)
 
+    # Filtrar por ambitos solicitados (si la dim es legacy sin columna, asumir Perú).
+    if "idAmbitoGeografico" in df_dist.columns:
+        df_dist = df_dist.filter(pl.col("idAmbitoGeografico").is_in(list(ambitos)))
+    if "idAmbitoGeografico" in df_loc.columns:
+        df_loc = df_loc.filter(pl.col("idAmbitoGeografico").is_in(list(ambitos)))
+
+    # Dim legacy sin idAmbitoGeografico: asumir Perú.
+    if "idAmbitoGeografico" not in df_loc.columns:
+        df_loc = df_loc.with_columns(
+            pl.lit(AMBITO_PERU).alias("idAmbitoGeografico")
+        )
+
     # Un local "gatillo" por distrito: el primero en orden estable.
     triggers = (
         df_loc.sort(["ubigeoDistrito", "codigoLocalVotacion"])
         .group_by("ubigeoDistrito", maintain_order=True)
-        .agg(pl.first("codigoLocalVotacion").alias("codigoLocalGatillo"))
+        .agg(
+            pl.first("codigoLocalVotacion").alias("codigoLocalGatillo"),
+            pl.first("idAmbitoGeografico").alias("idAmbitoGeografico"),
+        )
     )
 
     # Join con distritos para conservar nombre y ubigeos padre en dim/mesas.
@@ -105,7 +129,11 @@ async def crawl_mesas(
         right_on="ubigeoDistritoDim",
         how="inner",
     )
-    log.info("distritos a iterar: %d", len(pairs))
+    log.info(
+        "distritos a iterar (ambitos=%s): %d",
+        ambitos,
+        len(pairs),
+    )
 
     sem = asyncio.Semaphore(concurrency)
 
@@ -116,12 +144,14 @@ async def crawl_mesas(
                 id_eleccion,
                 row["ubigeoDistrito"],
                 int(row["codigoLocalGatillo"]),
+                id_ambito=int(row["idAmbitoGeografico"]),
             )
             extras = {
                 "ubigeoDistrito": row["ubigeoDistrito"],
                 "ubigeoProvincia": row["ubigeoProvincia"],
                 "ubigeoDepartamento": row["ubigeoDepartamento"],
                 "nombreDistrito": row["nombreDistrito"],
+                "idAmbitoGeografico": int(row["idAmbitoGeografico"]),
             }
             return [{**r, **extras} for r in rows]
 
@@ -148,8 +178,9 @@ async def crawl_mesas(
 async def crawl_and_persist(
     c: OnpeClient,
     id_eleccion: int = ELECCION_PRESIDENCIAL,
+    ambitos: tuple[int, ...] = AMBITOS_TODOS,
 ) -> tuple[int, str]:
     """Crawlea y persiste dim/mesas.parquet. Retorna (n_filas, path)."""
-    df = await crawl_mesas(c, id_eleccion)
+    df = await crawl_mesas(c, id_eleccion, ambitos=ambitos)
     path = write_dim("mesas", df)
     return len(df), str(path)

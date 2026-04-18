@@ -28,6 +28,9 @@ ELECCIONES_REGIONALES: tuple[int, ...] = (
 )
 
 AMBITO_PERU = 1  # idAmbitoGeografico
+AMBITO_EXTRANJERO = 2  # jerarquía: continente (91-95) -> pais -> ciudad
+
+AMBITOS_TODOS: tuple[int, ...] = (AMBITO_PERU, AMBITO_EXTRANJERO)
 
 
 # --- Catálogos y jerarquía geográfica ---------------------------------------
@@ -47,24 +50,31 @@ async def distritos_electorales(c: OnpeClient) -> list[dict[str, Any]]:
     return (await c.get_json("/distrito-electoral/distritos"))["data"]
 
 
-async def departamentos(c: OnpeClient, id_eleccion: int) -> list[dict[str, Any]]:
+async def departamentos(
+    c: OnpeClient, id_eleccion: int, id_ambito: int = AMBITO_PERU
+) -> list[dict[str, Any]]:
+    """Nivel 0 de la jerarquía. Con ambito=2 devuelve los 5 continentes."""
     return (
         await c.get_json(
             "/ubigeos/departamentos",
-            params={"idEleccion": id_eleccion, "idAmbitoGeografico": AMBITO_PERU},
+            params={"idEleccion": id_eleccion, "idAmbitoGeografico": id_ambito},
         )
     )["data"]
 
 
 async def provincias(
-    c: OnpeClient, id_eleccion: int, ubigeo_depto: str
+    c: OnpeClient,
+    id_eleccion: int,
+    ubigeo_depto: str,
+    id_ambito: int = AMBITO_PERU,
 ) -> list[dict[str, Any]]:
+    """Nivel 1. Con ambito=2, `ubigeo_depto` es un continente y devuelve países."""
     return (
         await c.get_json(
             "/ubigeos/provincias",
             params={
                 "idEleccion": id_eleccion,
-                "idAmbitoGeografico": AMBITO_PERU,
+                "idAmbitoGeografico": id_ambito,
                 "idUbigeoDepartamento": ubigeo_depto,
             },
         )
@@ -72,14 +82,18 @@ async def provincias(
 
 
 async def distritos(
-    c: OnpeClient, id_eleccion: int, ubigeo_prov: str
+    c: OnpeClient,
+    id_eleccion: int,
+    ubigeo_prov: str,
+    id_ambito: int = AMBITO_PERU,
 ) -> list[dict[str, Any]]:
+    """Nivel 2. Con ambito=2, `ubigeo_prov` es un país y devuelve ciudades."""
     return (
         await c.get_json(
             "/ubigeos/distritos",
             params={
                 "idEleccion": id_eleccion,
-                "idAmbitoGeografico": AMBITO_PERU,
+                "idAmbitoGeografico": id_ambito,
                 "idUbigeoProvincia": ubigeo_prov,
             },
         )
@@ -245,11 +259,14 @@ async def listar_actas(
     codigo_local_votacion: int,
     pagina: int = 0,
     tamanio: int = 100,
+    id_ambito: int = AMBITO_PERU,
 ) -> dict[str, Any]:
     """Listado paginado de actas.
 
     Todos los params son obligatorios: si falta alguno la API devuelve
     `content: []` silenciosamente (no es error, es diseño del endpoint).
+    Con `id_ambito=2`, `ubigeo_dist` debe ser una ciudad del exterior
+    (e.g. 920202 = Buenos Aires).
     """
     return (
         await c.get_json(
@@ -257,7 +274,7 @@ async def listar_actas(
             params={
                 "pagina": pagina,
                 "tamanio": tamanio,
-                "idAmbitoGeografico": AMBITO_PERU,
+                "idAmbitoGeografico": id_ambito,
                 "idEleccion": id_eleccion,
                 "idUbigeo": ubigeo_dist,
                 "idLocalVotacion": codigo_local_votacion,
