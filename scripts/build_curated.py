@@ -32,11 +32,23 @@ def _latest_run_per_idacta(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.group_by("idActa").agg(pl.col("run_ts_ms").max())
 
 
+def _scan_relaxed(base_dir: Path) -> pl.LazyFrame:
+    """Escanea parquets Hive-particionados concatenando con schemas relajados.
+
+    Algunos chunks (p.ej. cabeceras del exterior, donde idMesa siempre es null)
+    terminan con una columna de dtype Null en Polars. Concatenar con el glob
+    default falla al mezclarse con chunks donde la misma columna es String.
+    `diagonal_relaxed` promueve Null al supertipo (String) en la unión.
+    """
+    paths = sorted(base_dir.glob("**/*.parquet"))
+    if not paths:
+        raise FileNotFoundError(f"sin parquets bajo {base_dir}")
+    lfs = [pl.scan_parquet(str(p), hive_partitioning=True) for p in paths]
+    return pl.concat(lfs, how="diagonal_relaxed")
+
+
 def build_cabecera(dry_run: bool) -> tuple[pl.DataFrame, pl.DataFrame]:
-    lf = pl.scan_parquet(
-        str(FACTS_CAB / "**/*.parquet"),
-        hive_partitioning=True,
-    )
+    lf = _scan_relaxed(FACTS_CAB)
     raw = lf.select(pl.len()).collect().item()
 
     latest = _latest_run_per_idacta(lf)
@@ -57,10 +69,7 @@ def build_cabecera(dry_run: bool) -> tuple[pl.DataFrame, pl.DataFrame]:
 
 
 def build_votos(latest: pl.DataFrame, dry_run: bool) -> int:
-    lf = pl.scan_parquet(
-        str(FACTS_VOT / "**/*.parquet"),
-        hive_partitioning=True,
-    )
+    lf = _scan_relaxed(FACTS_VOT)
     raw = lf.select(pl.len()).collect().item()
 
     # Filtrar votos al run_ts_ms ganador de cada idActa (el más reciente que
