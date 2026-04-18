@@ -1,0 +1,37 @@
+[project]
+name = "onpe-eg2026"
+version = "0.1.0"
+description = "Ingesta de resultados ONPE EG2026 desde el API reverse-engineered"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "f3r21", email = "f3r21@icloud.com" }]
+dependencies = [
+    "httpx[http2]>=0.27",
+    "tenacity>=8.5",
+    "polars>=1.8",
+    "pyarrow>=17.0",
+]
+
+[project.optional-dependencies]
+query = ["duckdb>=1.1"]
+dev = ["ruff>=0.6", "pytest>=8.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/onpe"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"

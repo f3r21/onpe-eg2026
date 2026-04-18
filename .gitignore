@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Envs y secretos
+.env
+
+# Datos crudos (outputs del ingestor — muy grandes, regenerables)
+data/
+
+# Logs y corridas
+*.log
+nohup.out
+
+# Sistema
+.DS_Store
