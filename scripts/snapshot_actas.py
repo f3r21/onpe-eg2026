@@ -1,7 +1,10 @@
 """Snapshot resumable de /actas/{idActa} para las 5 elecciones.
 
-Primera corrida:
+Primera corrida (Perú + exterior, todos los ámbitos):
     uv run python scripts/snapshot_actas.py
+
+Solo exterior (idAmbitoGeografico=2, ~12.7k actas, ~15 min a 15 rps):
+    uv run python scripts/snapshot_actas.py --ambitos 2 --rps 15 --concurrency 15
 
 Con límite (smoke test, 50 actas):
     uv run python scripts/snapshot_actas.py --limit 50
@@ -21,6 +24,7 @@ import polars as pl
 
 from onpe.actas import SnapshotConfig, snapshot_actas
 from onpe.client import ClientConfig, OnpeClient
+from onpe.endpoints import AMBITOS_TODOS
 from onpe.storage import DIM_DIR
 
 
@@ -30,6 +34,12 @@ async def main() -> None:
     parser.add_argument("--resume", type=int, default=None, help="run_ts_ms a reanudar")
     parser.add_argument("--rps", type=float, default=10.0, help="requests por segundo")
     parser.add_argument("--concurrency", type=int, default=10, help="concurrencia del cliente")
+    parser.add_argument(
+        "--ambitos",
+        type=str,
+        default=",".join(str(a) for a in AMBITOS_TODOS),
+        help="idAmbitoGeografico a incluir, comma-separated. Default: todos (1,2)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -38,11 +48,22 @@ async def main() -> None:
     )
     log = logging.getLogger("snapshot_actas")
 
+    ambitos: tuple[int, ...] = tuple(int(x) for x in args.ambitos.split(",") if x.strip())
+
     mesas_path = DIM_DIR / "mesas.parquet"
     if not mesas_path.exists():
         raise SystemExit(f"falta {mesas_path}. Correr scripts/crawl_mesas.py antes.")
     df_mesas = pl.read_parquet(mesas_path)
     log.info("mesas cargadas: %d", len(df_mesas))
+
+    if "idAmbitoGeografico" in df_mesas.columns:
+        df_mesas = df_mesas.filter(pl.col("idAmbitoGeografico").is_in(list(ambitos)))
+        log.info("mesas tras filtro ambitos=%s: %d", ambitos, len(df_mesas))
+    elif ambitos != AMBITOS_TODOS:
+        log.warning(
+            "mesas.parquet legacy sin idAmbitoGeografico; ignorando --ambitos=%s",
+            ambitos,
+        )
 
     cfg_http = ClientConfig(
         max_concurrent=args.concurrency, rate_per_second=args.rps
