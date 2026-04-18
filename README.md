@@ -71,6 +71,15 @@ nohup caffeinate -dims uv run python scripts/snapshot_actas.py \
 
 `caffeinate -dims` previene sleep; `&!` en zsh backgroundea + disown en un paso.
 
+**4. Capa curated** — consolida todos los snapshots crudos en un único parquet por tabla, quedándose con el `run_ts_ms` más reciente por `idActa`. Pensado para ser el punto de entrada de análisis (Polars/DuckDB) sin tener que manejar Hive partitions.
+
+```bash
+uv run python scripts/build_curated.py
+uv run python scripts/build_curated.py --dry-run
+```
+
+Produce `data/curated/actas_cabecera.parquet` (~5 MB) y `data/curated/actas_votos.parquet` (~87 MB). Usa `sink_parquet` en streaming para no materializar los 18M filas de votos en RAM.
+
 ## Smoke test
 
 Valida todos los endpoints principales y la fórmula del `idActa`:
@@ -95,8 +104,11 @@ data/
 │   ├── mapa_calor/
 │   ├── resumen_elecciones/
 │   ├── actas_cabecera/           # una fila por idActa
-│   │   └── snapshot_date=2026-04-18/<run_ts_ms>-<chunk_idx>.parquet
+│   │   └── snapshot_date=2026-04-18/run_ts_ms=<run_ts_ms>/<chunk_idx>.parquet
 │   └── actas_votos/              # una fila por (idActa × opción)
+├── curated/                      # dedupado, último run por idActa (consumo directo)
+│   ├── actas_cabecera.parquet
+│   └── actas_votos.parquet
 ├── state/                        # checkpoints JSON para runs resumables
 └── smoke/                        # muestras del smoke test
 ```
@@ -118,6 +130,7 @@ scripts/
 ├── crawl_mesas.py           # Fase 2
 ├── snapshot_aggregates.py   # Fase 3a (barato, repetible)
 ├── snapshot_actas.py        # Fase 3b (caro, resumable)
+├── build_curated.py         # Fase 4 (consolida snapshots)
 └── smoke.py                 # validación end-to-end
 ```
 

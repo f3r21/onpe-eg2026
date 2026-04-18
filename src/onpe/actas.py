@@ -15,7 +15,9 @@ Se produce dos tablas fact:
 Resumabilidad: checkpoint JSON en `data/state/actas_run_<run_ts_ms>.json`
 con los idActa ya completados. Al reanudar se reutiliza `run_ts_ms` y se
 saltean los idActa ya registrados. Los parquet se escriben chunked en
-`data/facts/<tabla>/snapshot_date=<lima>/<run_ts_ms>-<chunk_idx>.parquet`.
+`data/facts/<tabla>/snapshot_date=<lima>/run_ts_ms=<run_ts_ms>/<chunk_idx>.parquet`.
+El layout Hive por `run_ts_ms` permite aislar runs parciales o abortados
+sin contaminar los reads del run definitivo.
 
 Concurrencia: batches de `BATCH` tareas con `asyncio.gather`; el cliente
 aplica semáforo + rate-limit global.
@@ -227,9 +229,24 @@ def normalize_acta(
 
 def _chunk_path(table: str, run_ts_ms: int, chunk_idx: int) -> Path:
     date = ms_to_lima_date(run_ts_ms)
-    part = FACT_DIR / table / f"snapshot_date={date}"
+    part = FACT_DIR / table / f"snapshot_date={date}" / f"run_ts_ms={run_ts_ms}"
     part.mkdir(parents=True, exist_ok=True)
-    return part / f"{run_ts_ms}-{chunk_idx:05d}.parquet"
+    return part / f"{chunk_idx:05d}.parquet"
+
+
+def _coerce_null_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """Castea columnas pl.Null a pl.String.
+
+    Si un chunk no trae valores poblados para una columna (e.g. todas las
+    actas de ese chunk son de Presidencial y `cargo`/`sexo` son null, o
+    ninguna tiene `descripcionSubEstadoActa`), Polars infiere pl.Null.
+    Al concatenar con chunks donde sí hay valores String, la lectura rompe
+    con SchemaError. Forzar String mantiene el schema estable entre chunks.
+    """
+    null_cols = [c for c, dt in df.schema.items() if dt == pl.Null]
+    if null_cols:
+        df = df.with_columns([pl.col(c).cast(pl.String) for c in null_cols])
+    return df
 
 
 def _flush_chunk(
@@ -239,12 +256,12 @@ def _flush_chunk(
     votos_buf: list[dict[str, Any]],
 ) -> None:
     if cabecera_buf:
-        df = pl.DataFrame(cabecera_buf, infer_schema_length=None)
+        df = _coerce_null_columns(pl.DataFrame(cabecera_buf, infer_schema_length=None))
         df.write_parquet(
             _chunk_path("actas_cabecera", run_ts_ms, chunk_idx), compression="zstd"
         )
     if votos_buf:
-        df = pl.DataFrame(votos_buf, infer_schema_length=None)
+        df = _coerce_null_columns(pl.DataFrame(votos_buf, infer_schema_length=None))
         df.write_parquet(
             _chunk_path("actas_votos", run_ts_ms, chunk_idx), compression="zstd"
         )
