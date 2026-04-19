@@ -8,15 +8,26 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
 # Envs y secretos
 .env
+*.pem
+credentials.json
+service-account*.json
 
 # Datos crudos (outputs del ingestor — muy grandes, regenerables)
 data/
 
 # Logs y corridas
 *.log
+logs/
 nohup.out
 
 # Sistema
 .DS_Store
+.idea/
+.vscode/
