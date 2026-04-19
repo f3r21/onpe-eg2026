@@ -25,6 +25,7 @@ import polars as pl
 from onpe.actas import SnapshotConfig, snapshot_actas
 from onpe.client import ClientConfig, OnpeClient
 from onpe.endpoints import AMBITOS_TODOS
+from onpe.locks import LockHeld, PipelineLock
 from onpe.storage import DIM_DIR
 
 
@@ -70,10 +71,17 @@ async def main() -> None:
     )
     cfg_snap = SnapshotConfig()
     t0 = time.perf_counter()
-    async with OnpeClient(cfg_http) as c:
-        ck, stats = await snapshot_actas(
-            c, df_mesas, cfg_snap, resume_run_ts_ms=args.resume, limit=args.limit
-        )
+    # Lock advisory: previene colisión de rate-limit con daily_refresh corriendo
+    # en paralelo. El loop de aggregates es seguro paralelo (no toma este lock).
+    try:
+        with PipelineLock(metadata={"job": "snapshot_actas", "ambitos": list(ambitos)}):
+            async with OnpeClient(cfg_http) as c:
+                ck, stats = await snapshot_actas(
+                    c, df_mesas, cfg_snap, resume_run_ts_ms=args.resume, limit=args.limit
+                )
+    except LockHeld as e:
+        log.error("abortando: %s", e)
+        raise SystemExit(1) from e
     dt = time.perf_counter() - t0
     log.info(
         "run_ts_ms=%d done in %.1fs: ok=%d vacias=%d fallidas=%d (completados=%d/%d)",

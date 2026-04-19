@@ -36,6 +36,7 @@ import polars as pl
 
 from onpe.client import OnpeClient, OnpeError
 from onpe.endpoints import acta_detalle, id_acta
+from onpe.schemas import SchemaDriftError, validate_chunk
 from onpe.storage import (
     DATA_DIR,
     FACT_DIR,
@@ -131,7 +132,11 @@ def enumerate_tasks(
 
 _CABECERA_COLS = (
     "id",
-    "idMesa",
+    # NOTA: "idMesa" NO está: /actas/{idActa} nunca lo devuelve poblado (100%
+    # null sobre 463,830 filas del snapshot nacional). La identidad canónica de
+    # la mesa se preserva como:
+    #   - codigoMesa (string padded, "005956")
+    #   - idMesaRef (int, 5956) — agregado desde el fallback enumerate_tasks.
     "codigoMesa",
     "descripcionMesa",
     "idEleccion",
@@ -152,9 +157,76 @@ _CABECERA_COLS = (
     "estadoActaResolucion",
     "estadoDescripcionActaResolucion",
     "descripcionSubEstadoActa",
+    # Indica el pipeline tecnológico usado para procesar el acta (OCR vs manual, etc.)
+    "codigoSolucionTecnologica",
+    "descripcionSolucionTecnologica",
+)
+
+_LINEA_TIEMPO_COLS: tuple[str, ...] = (
+    "codigoEstadoActa",
+    "descripcionEstadoActa",
+    "descripcionEstadoActaResolucion",
+    "fechaRegistro",
+)
+
+_ARCHIVOS_COLS: tuple[str, ...] = (
+    "id",
+    "tipo",
+    "nombre",
+    "descripcion",
+    "daudFechaCreacion",
 )
 
 _SPECIAL_DESCRIPTIONS = ("VOTOS EN BLANCO", "VOTOS NULOS", "VOTOS IMPUGNADOS")
+
+
+# Columnas numéricas conocidas por tabla. Si Polars infiere pl.Null porque todo
+# el chunk tiene la columna vacía (p.ej. actas P sin totales), castear a String
+# rompe luego el curated (diagonal_relaxed promueve Int|String → String). El
+# mapa dice "cuando veas Null en esta columna, castea a este tipo, no a String".
+# Cualquier columna Null ausente de este mapa se asume String (tipo fallback).
+_NUMERIC_SCHEMAS: dict[str, dict[str, pl.DataType]] = {
+    "actas_cabecera": {
+        "idActa": pl.Int64,
+        "idEleccion": pl.Int64,
+        "idMesaRef": pl.Int64,
+        "totalElectoresHabiles": pl.Int64,
+        "totalVotosEmitidos": pl.Int64,
+        "totalVotosValidos": pl.Int64,
+        "totalAsistentes": pl.Int64,
+        "porcentajeParticipacionCiudadana": pl.Float64,
+        "codigoSolucionTecnologica": pl.Int64,
+        "snapshot_ts_ms": pl.Int64,
+    },
+    "actas_votos": {
+        # NOTA: `ccodigo` es String zero-padded ("00000014") en el API, no int.
+        # `nporcentajeVotosValidos` y `nporcentajeVotosEmitidos` también vienen
+        # como String formateado ("23.78"), no Float. Mantener así preserva el
+        # valor tal como ONPE lo publica; el parseo a float es responsabilidad
+        # del consumidor.
+        "idActa": pl.Int64,
+        "idEleccion": pl.Int64,
+        "es_especial": pl.Boolean,
+        "nposicion": pl.Int64,
+        "nvotos": pl.Int64,
+        "totalCandidatos": pl.Int64,
+        "snapshot_ts_ms": pl.Int64,
+    },
+    "actas_linea_tiempo": {
+        "idActa": pl.Int64,
+        "idEleccion": pl.Int64,
+        "evento_idx": pl.Int64,
+        "fechaRegistro": pl.Int64,
+        "snapshot_ts_ms": pl.Int64,
+    },
+    "actas_archivos": {
+        "idActa": pl.Int64,
+        "idEleccion": pl.Int64,
+        "tipo": pl.Int64,
+        "daudFechaCreacion": pl.Int64,
+        "snapshot_ts_ms": pl.Int64,
+    },
+}
 
 
 def _first_candidato(cand: list[dict[str, Any]] | None) -> dict[str, Any]:
@@ -175,15 +247,25 @@ def normalize_acta(
     id_mesa_fallback: int,
     ubigeo_distrito: str,
     snapshot_ts_ms: int,
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-    """Parte la respuesta en (cabecera_row, votos_rows).
+) -> tuple[
+    dict[str, Any] | None,
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """Parte la respuesta en (cabecera_row, votos, linea_tiempo, archivos).
 
-    Si la mesa no existe (codigoMesa is None), devuelve (None, []).
+    - `linea_tiempo` es la traza de transiciones de estado del acta (una fila
+      por evento). Longitud variable; vacía para Pendientes.
+    - `archivos` es la lista de PDFs adjuntos (acta de sufragio, escrutinio).
+      Longitud tipicamente 2 para todas las mesas (incluso Pendientes).
+
+    Si la mesa no existe (codigoMesa is None), devuelve (None, [], [], []).
     """
     if not data or data.get("codigoMesa") is None:
-        return None, []
+        return None, [], [], []
 
-    acta_id = data.get("id") or acta_id_fallback
+    acta_id = int(data.get("id") or acta_id_fallback)
     id_eleccion = data.get("idEleccion")
     stamps = {
         "snapshot_ts_ms": snapshot_ts_ms,
@@ -191,7 +273,7 @@ def normalize_acta(
     }
 
     cabecera = {c: data.get(c) for c in _CABECERA_COLS}
-    cabecera["idActa"] = int(acta_id)
+    cabecera["idActa"] = acta_id
     cabecera["idMesaRef"] = id_mesa_fallback
     cabecera["ubigeoDistrito"] = ubigeo_distrito
     cabecera.update(stamps)
@@ -200,7 +282,7 @@ def normalize_acta(
     for d in data.get("detalle") or []:
         desc = d.get("descripcion") or ""
         row = {
-            "idActa": int(acta_id),
+            "idActa": acta_id,
             "idEleccion": id_eleccion,
             "ubigeoDistrito": ubigeo_distrito,
             "descripcion": desc,
@@ -221,7 +303,32 @@ def normalize_acta(
         row.update(stamps)
         votos.append(row)
 
-    return cabecera, votos
+    linea_tiempo: list[dict[str, Any]] = []
+    for idx, ev in enumerate(data.get("lineaTiempo") or []):
+        row = {
+            "idActa": acta_id,
+            "idEleccion": id_eleccion,
+            "ubigeoDistrito": ubigeo_distrito,
+            "evento_idx": idx,
+            **{c: ev.get(c) for c in _LINEA_TIEMPO_COLS},
+        }
+        row.update(stamps)
+        linea_tiempo.append(row)
+
+    archivos: list[dict[str, Any]] = []
+    for a in data.get("archivos") or []:
+        row = {
+            "idActa": acta_id,
+            "idEleccion": id_eleccion,
+            "ubigeoDistrito": ubigeo_distrito,
+            # `id` en archivos[] es distinto del `id` (idActa) del top-level.
+            "archivoId": a.get("id"),
+            **{c: a.get(c) for c in _ARCHIVOS_COLS if c != "id"},
+        }
+        row.update(stamps)
+        archivos.append(row)
+
+    return cabecera, votos, linea_tiempo, archivos
 
 
 # --- Escritura de chunks ---------------------------------------------------
@@ -234,19 +341,31 @@ def _chunk_path(table: str, run_ts_ms: int, chunk_idx: int) -> Path:
     return part / f"{chunk_idx:05d}.parquet"
 
 
-def _coerce_null_columns(df: pl.DataFrame) -> pl.DataFrame:
-    """Castea columnas pl.Null a pl.String.
+def _coerce_null_columns(
+    df: pl.DataFrame, numeric_schema: dict[str, pl.DataType] | None = None
+) -> pl.DataFrame:
+    """Castea columnas pl.Null al tipo esperado.
 
     Si un chunk no trae valores poblados para una columna (e.g. todas las
     actas de ese chunk son de Presidencial y `cargo`/`sexo` son null, o
-    ninguna tiene `descripcionSubEstadoActa`), Polars infiere pl.Null.
-    Al concatenar con chunks donde sí hay valores String, la lectura rompe
-    con SchemaError. Forzar String mantiene el schema estable entre chunks.
+    ninguna tiene `descripcionSubEstadoActa`, o todas las actas son P y
+    `totalVotosEmitidos` es null), Polars infiere pl.Null. Al concatenar
+    con chunks donde sí hay valores, `diagonal_relaxed` promueve al
+    supertype — si un chunk es Int y otro Null→String, el supertype es
+    String y se rompe la comparación numérica en dq_check.
+
+    `numeric_schema` mapea columnas numéricas a su dtype esperado para
+    evitar el cast por default a String. Columnas ausentes del mapa caen
+    a String (fallback seguro para columnas de texto).
     """
+    numeric_schema = numeric_schema or {}
     null_cols = [c for c, dt in df.schema.items() if dt == pl.Null]
-    if null_cols:
-        df = df.with_columns([pl.col(c).cast(pl.String) for c in null_cols])
-    return df
+    if not null_cols:
+        return df
+    casts = [
+        pl.col(c).cast(numeric_schema.get(c, pl.String)) for c in null_cols
+    ]
+    return df.with_columns(casts)
 
 
 def _flush_chunk(
@@ -254,17 +373,43 @@ def _flush_chunk(
     chunk_idx: int,
     cabecera_buf: list[dict[str, Any]],
     votos_buf: list[dict[str, Any]],
+    linea_tiempo_buf: list[dict[str, Any]],
+    archivos_buf: list[dict[str, Any]],
 ) -> None:
-    if cabecera_buf:
-        df = _coerce_null_columns(pl.DataFrame(cabecera_buf, infer_schema_length=None))
-        df.write_parquet(
-            _chunk_path("actas_cabecera", run_ts_ms, chunk_idx), compression="zstd"
+    """Flushea las 4 tablas (cabecera, votos, linea_tiempo, archivos) a parquet.
+
+    Cada tabla se escribe solo si su buffer no está vacío. Los chunks mantienen
+    el mismo `chunk_idx` entre tablas para poder correlacionar runs parciales.
+    """
+    tables = {
+        "actas_cabecera": cabecera_buf,
+        "actas_votos": votos_buf,
+        "actas_linea_tiempo": linea_tiempo_buf,
+        "actas_archivos": archivos_buf,
+    }
+    for name, buf in tables.items():
+        if not buf:
+            continue
+        df = _coerce_null_columns(
+            pl.DataFrame(buf, infer_schema_length=None),
+            _NUMERIC_SCHEMAS.get(name),
         )
-    if votos_buf:
-        df = _coerce_null_columns(pl.DataFrame(votos_buf, infer_schema_length=None))
-        df.write_parquet(
-            _chunk_path("actas_votos", run_ts_ms, chunk_idx), compression="zstd"
-        )
+        # Schema validation fail-fast antes de persistir el chunk. Si ONPE
+        # cambió el tipo de una columna, abortamos sin contaminar el facts
+        # layer. El caller (snapshot_actas) atrapa la excepción, guarda
+        # checkpoint, y propaga para que el operador investigue.
+        try:
+            validate_chunk(df, name, strict=True)
+        except SchemaDriftError as e:
+            log.error(
+                "schema drift en chunk %d tabla=%s: %d violación(es). "
+                "Abortando flush para evitar contaminar facts. "
+                "Actualizar SCHEMAS[%s] en src/onpe/schemas.py tras investigar. "
+                "Detalles: %s",
+                chunk_idx, name, len(e.violations), name, e.violations[:5],
+            )
+            raise
+        df.write_parquet(_chunk_path(name, run_ts_ms, chunk_idx), compression="zstd")
 
 
 # --- Loop principal --------------------------------------------------------
@@ -276,26 +421,50 @@ async def _fetch_one(
     id_mesa: int,
     ubigeo: str,
     snapshot_ts_ms: int,
-) -> tuple[int, dict[str, Any] | None, list[dict[str, Any]], str | None]:
-    """Fetch + normalize. Devuelve (acta_id, cabecera, votos, error_o_None)."""
+) -> tuple[
+    int,
+    dict[str, Any] | None,
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    str | None,
+]:
+    """Fetch + normalize.
+
+    Devuelve (acta_id, cabecera, votos, linea_tiempo, archivos, error_o_None).
+    """
     try:
         data = await acta_detalle(c, acta_id)
     except OnpeError as e:
-        return acta_id, None, [], str(e)
-    cab, votos = normalize_acta(data, acta_id, id_mesa, ubigeo, snapshot_ts_ms)
-    return acta_id, cab, votos, None
+        return acta_id, None, [], [], [], str(e)
+    cab, votos, linea, archivos = normalize_acta(
+        data, acta_id, id_mesa, ubigeo, snapshot_ts_ms
+    )
+    return acta_id, cab, votos, linea, archivos, None
 
 
 async def snapshot_actas(
     c: OnpeClient,
-    df_mesas: pl.DataFrame,
+    df_mesas: pl.DataFrame | None = None,
     cfg: SnapshotConfig | None = None,
     resume_run_ts_ms: int | None = None,
     limit: int | None = None,
+    tasks_override: list[tuple[int, int, str, int]] | None = None,
 ) -> tuple[Checkpoint, dict[str, int]]:
-    """Corre el snapshot completo (o hasta `limit` actas). Resumable."""
+    """Corre el snapshot completo (o hasta `limit` actas). Resumable.
+
+    `tasks_override` permite pasar directamente una lista precomputada de
+    `(acta_id, id_mesa, ubigeo_distrito, id_eleccion)` — útil para refresh
+    incremental donde solo queremos re-fetchear un subconjunto (actas en
+    estado P o E). Si es None, se derivan de `df_mesas` × `cfg.elecciones`.
+    """
     cfg = cfg or SnapshotConfig()
-    tasks = enumerate_tasks(df_mesas, cfg.elecciones)
+    if tasks_override is not None:
+        tasks = list(tasks_override)
+    else:
+        if df_mesas is None:
+            raise ValueError("df_mesas o tasks_override es requerido")
+        tasks = enumerate_tasks(df_mesas, cfg.elecciones)
     if limit is not None:
         tasks = tasks[:limit]
 
@@ -326,6 +495,8 @@ async def snapshot_actas(
 
     cabecera_buf: list[dict[str, Any]] = []
     votos_buf: list[dict[str, Any]] = []
+    linea_tiempo_buf: list[dict[str, Any]] = []
+    archivos_buf: list[dict[str, Any]] = []
     stats = {"ok": 0, "vacias": 0, "fallidas": 0}
 
     # Cada cuántos batches logeamos progreso a INFO. 10 batches = 5000 actas.
@@ -337,7 +508,7 @@ async def snapshot_actas(
         results = await asyncio.gather(
             *(_fetch_one(c, aid, im, ub, ck.run_ts_ms) for aid, im, ub, _ in batch)
         )
-        for acta_id, cab, votos, err in results:
+        for acta_id, cab, votos, linea, archivos, err in results:
             if err is not None:
                 ck.failed.append({"acta_id": acta_id, "error": err})
                 stats["fallidas"] += 1
@@ -348,23 +519,36 @@ async def snapshot_actas(
                 continue
             cabecera_buf.append(cab)
             votos_buf.extend(votos)
+            linea_tiempo_buf.extend(linea)
+            archivos_buf.extend(archivos)
             stats["ok"] += 1
 
         # Checkpoint por batch: en caída perdemos a lo sumo `cfg.batch` actas.
         ck.save()
 
         if len(cabecera_buf) >= cfg.chunk_size:
-            _flush_chunk(ck.run_ts_ms, ck.next_chunk_idx, cabecera_buf, votos_buf)
+            _flush_chunk(
+                ck.run_ts_ms,
+                ck.next_chunk_idx,
+                cabecera_buf,
+                votos_buf,
+                linea_tiempo_buf,
+                archivos_buf,
+            )
             log.info(
-                "chunk %d flusheado (%d cab / %d votos), progreso %d/%d",
+                "chunk %d flusheado (%d cab / %d votos / %d linea / %d arch), progreso %d/%d",
                 ck.next_chunk_idx,
                 len(cabecera_buf),
                 len(votos_buf),
+                len(linea_tiempo_buf),
+                len(archivos_buf),
                 len(ck.completed_acta_ids),
                 ck.total_expected,
             )
             cabecera_buf = []
             votos_buf = []
+            linea_tiempo_buf = []
+            archivos_buf = []
             ck.next_chunk_idx += 1
             ck.save()
         elif (bidx + 1) % log_every_n_batches == 0:
@@ -379,13 +563,22 @@ async def snapshot_actas(
             )
 
     # Flush final de lo que quedó en buffer.
-    if cabecera_buf or votos_buf:
-        _flush_chunk(ck.run_ts_ms, ck.next_chunk_idx, cabecera_buf, votos_buf)
+    if cabecera_buf or votos_buf or linea_tiempo_buf or archivos_buf:
+        _flush_chunk(
+            ck.run_ts_ms,
+            ck.next_chunk_idx,
+            cabecera_buf,
+            votos_buf,
+            linea_tiempo_buf,
+            archivos_buf,
+        )
         log.info(
-            "chunk final %d flusheado (%d cab / %d votos)",
+            "chunk final %d flusheado (%d cab / %d votos / %d linea / %d arch)",
             ck.next_chunk_idx,
             len(cabecera_buf),
             len(votos_buf),
+            len(linea_tiempo_buf),
+            len(archivos_buf),
         )
         ck.next_chunk_idx += 1
     ck.save()

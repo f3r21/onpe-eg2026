@@ -11,6 +11,7 @@ Referencia: fuentes_datos.md, apéndice A.
 from __future__ import annotations
 
 import asyncio
+import random
 from dataclasses import dataclass
 from typing import Any
 
@@ -95,7 +96,12 @@ class OnpeClient:
             loop = asyncio.get_event_loop()
             delta = loop.time() - self._last_request_at
             if delta < self._min_interval:
-                await asyncio.sleep(self._min_interval - delta)
+                # Jitter ±10% del intervalo: suaviza el patrón temporal para
+                # reducir chance de que CloudFront detecte comportamiento de
+                # scraper regular (hardening R2). Rate efectivo promedio no
+                # cambia apreciablemente.
+                jitter = random.uniform(-0.1, 0.1) * self._min_interval
+                await asyncio.sleep(max(0.0, self._min_interval - delta + jitter))
             self._last_request_at = loop.time()
 
     @retry(
