@@ -2,6 +2,14 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/). Proyecto sigue [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Removido
+- **Histórico EG2021**: `data/historico/eg2021/`, `scripts/ingest_historico_eg2021.py` y función `comparativa_historico` de `analytics_report.py`. El dataset queda laser-focused en EG2026 primera vuelta con solo fuentes oficiales del gobierno peruano. El histórico EG2021 queda disponible como referencia externa ([jmcastagnetto/2021-elecciones-generales-peru-datos-de-onpe](https://github.com/jmcastagnetto/2021-elecciones-generales-peru-datos-de-onpe)) pero NO forma parte del dataset onpe-eg2026.
+
+### Cambiado
+- README + CLAUDE.md + docs actualizados para reflejar scope "solo EG2026 primera vuelta".
+
 ## [1.0.0] — 2026-04-19
 
 Primera release pública del dataset electoral EG2026 + tooling open source.
@@ -14,7 +22,6 @@ Primera release pública del dataset electoral EG2026 + tooling open source.
 - **1.27M eventos de línea de tiempo** (transiciones de estado por acta).
 - **811,984 metadatos de archivos PDF** (archivoId + nombre UUID + tipo).
 - **222 GeoJSONs** ONPE: país + 25 deptos + 196 provincias.
-- **Histórico EG2021** como baseline (86k actas 1ra vuelta + 5 tablas distritales, fuente jmcastagnetto).
 - **Serie temporal de aggregates** (snapshot cada 15 min durante conteo).
 
 #### Pipeline
@@ -32,7 +39,7 @@ Primera release pública del dataset electoral EG2026 + tooling open source.
 - Pipeline: `crawl_dims`, `crawl_mesas`, `snapshot_aggregates`, `snapshot_actas`, `daily_refresh`, `build_curated`.
 - Enriquecimiento: `enrich_curated` (idAmbitoGeografico + idDistritoElectoral).
 - Data Quality: `dq_check` con **4 niveles** (integridad interna, cruce aggregates, cruces regionales, reconciliación oficial).
-- Externos: `download_geojsons`, `download_pdfs`, `ingest_datosabiertos`, `ingest_historico_eg2021`.
+- Externos: `download_geojsons`, `download_pdfs`, `ingest_datosabiertos`.
 - Ops: `smoke`, `investigate_anomaly_240`, `monitor_datosabiertos`, `validate_ambitos`, `migrate_null_dtypes`.
 - Visualización: `dashboard` (HTML de salud), `build_choropleth` (mapa drilldown 3 niveles), `analytics_report`.
 
@@ -66,7 +73,7 @@ Primera release pública del dataset electoral EG2026 + tooling open source.
 
 - **Voto preferencial** (D5): sin endpoint API ONPE. Disponible solo en PDFs de acta de escrutinio (tipo 1). Excluido del 100% actual, opción OCR deferred.
 - **DQ Nivel 4** (reconciliación oficial): placeholder hasta publicación ONPE en datosabiertos.gob.pe (~4 semanas post-proclamación JNE). Monitor semanal activo.
-- **Mapeo RENIEC ↔ ONPE ubigeos**: EG2021 usa RENIEC (INEI-like), EG2026 usa ONPE propio. Comparativa a nivel distrito individual requiere tabla mapping (deferred).
+- **Mapeo RENIEC ↔ ONPE ubigeos**: RENIEC usa esquema INEI-like, ONPE usa esquema propio. Para joins contra padrón RENIEC (v1.0 roadmap) hace falta tabla mapping.
 - **PDFs binarios en GCS**: descarga en curso (~725k PDFs, ~1 TB) en un bucket GCS configurable vía `--gcs-bucket gs://<tu-bucket>`. ETA ~2-3 días post-release. No bloquea el dataset estructurado.
 
 ---
