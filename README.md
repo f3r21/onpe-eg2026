@@ -1,6 +1,18 @@
 # onpe-eg2026
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![uv](https://img.shields.io/badge/packaging-uv-DE5FE9)](https://github.com/astral-sh/uv)
+[![Polars](https://img.shields.io/badge/data-Polars-CD792C)](https://pola.rs/)
+[![Tests](https://img.shields.io/badge/tests-87%20passing-brightgreen)](tests/)
+[![DQ](https://img.shields.io/badge/DQ-14%2F14%20PASS-brightgreen)](scripts/dq_check.py)
+[![Release](https://img.shields.io/github/v/release/f3r21/onpe-eg2026?include_prereleases)](https://github.com/f3r21/onpe-eg2026/releases)
+
 Ingesta de resultados de las **Elecciones Generales Perú 2026** desde el API reverse-engineered de ONPE (`resultadoelectoral.onpe.gob.pe/presentacion-backend/`). Produce un data lake en Parquet con particiones Hive, listo para consumir con Polars, DuckDB o pandas.
+
+**Dataset**: 463,830 actas × 5 elecciones · 18.6M filas de votos · 222 GeoJSONs · histórico EG2021 · 4 niveles de Data Quality.
+
+**Docs**: [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) · [Release notes v1.0](docs/RELEASE_NOTES_v1.0.md) · [fuentes_datos.md](fuentes_datos.md)
 
 Cubre las 5 elecciones simultáneas:
 
