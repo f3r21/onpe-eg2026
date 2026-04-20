@@ -13,7 +13,7 @@ Ingesta de resultados de las **Elecciones Generales Perú 2026** desde el API re
 
 **Dataset**: 463,830 actas × 5 elecciones · 18.6M filas de votos · 222 GeoJSONs · 4 niveles de Data Quality. **Scope**: Elecciones Generales Perú 2026 — **primera vuelta** (12-abr-2026). Solo fuentes oficiales del gobierno peruano (ONPE principalmente; JNE, RENIEC y El Peruano en roadmap).
 
-**Docs**: [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) · [ARCHITECTURE](docs/ARCHITECTURE.md) · [SECURITY](SECURITY.md) · [Release notes v1.0](docs/RELEASE_NOTES_v1.0.md) · [fuentes_datos.md](fuentes_datos.md)
+**Docs**: [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) · [ARCHITECTURE](docs/ARCHITECTURE.md) · [DATA_DICTIONARY](docs/DATA_DICTIONARY.md) · [METHODOLOGY](docs/METHODOLOGY.md) · [LIMITATIONS](docs/LIMITATIONS.md) · [SECURITY](SECURITY.md) · [CITATION](CITATION.cff) · [fuentes_datos.md](fuentes_datos.md)
 
 Cubre las 5 elecciones simultáneas:
 
