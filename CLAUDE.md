@@ -241,9 +241,11 @@ Ver plan detallado en la sesión Claude Code `/plan` (2026-04-18). Estado al 202
 - D1 download_pdfs → GCS: running. Endpoint descubierto 2026-04-19 via DevTools: `GET /presentacion-backend/actas/file?id={archivoId}` → `{success, data: signed_s3_url}`. Destino: `gs://onpe-eg2026-pdfs-f3r21` (proyecto `onpe-eg2026-f3r21` bajo org `f03436931-org`). Framework streaming S3→GCS con `asyncio.to_thread` para upload sync (fix perf 0.6→3.2 PDFs/s). ETA ~2.6 días para 725,782 PDFs (~1 TB).
 
 **Blocked — esperan input externo**:
-- D3 datosabiertos: deferred hasta publicación ONPE (2-4 sem post-proclamación JNE).
-- D4 histórico EG2021: bloqueado por Cloudflare challenge en resultadoshistorico.onpe.gob.pe. Alternativa: jmcastagnetto GitHub dataset ya extraído (fuentes_datos.md §7).
 - D5 voto preferencial: sin endpoint API descubierto. Decisión user pendiente: (a) DevTools, (b) excluir, (c) OCR PDFs, (d) esperar datosabiertos.
+
+**Completado 2026-04-19 adicional**:
+- D3 datosabiertos: monitor + ingest skeleton + DQ Nivel 4 (2 checks). Flag `--nivel 4` en dq_check.py. Baseline 50 datasets guardados. Deferred hasta publicación ONPE real (~2-4 sem post-JNE).
+- D4 histórico EG2021: ingestado desde jmcastagnetto (archivado). 86k actas mesa 1ra vuelta + distrital generales/resumen/votos/partidos/participación. Solo 1ra vuelta disponible; UBIGEO RENIEC (no INEI).
 
 **Deferred (fuera de scope del 100%)**:
 - Padrón RENIEC por distrito (enriquecimiento posterior, confirmado con user)
