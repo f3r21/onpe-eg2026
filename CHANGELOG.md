@@ -57,8 +57,8 @@ Primera release pública del dataset electoral EG2026 + tooling open source.
 ### Corregido
 
 - **Schema drift**: chunks con columnas `pl.Null` ya no contaminan el curated vía `diagonal_relaxed` → String promotion. Resuelto con `_NUMERIC_SCHEMAS` mapping y `validate_chunk` fail-fast.
-- **Bug #42** (post-smoke): `totalVotosEmitidos` all-null → String → contaminación del curated entero.
-- **Anomalía 240 actas C sin detalle** (task #58): clasificadas como "mesa no instalada" (100%, 48 mesas × 5 elecciones voto exterior). Documentadas y excluidas del denominador DQ.
+- **Bug post-smoke**: `totalVotosEmitidos` all-null → String → contaminación del curated entero.
+- **Anomalía 240 actas C sin detalle**: clasificadas como "mesa no instalada" (100%, 48 mesas × 5 elecciones voto exterior). Documentadas y excluidas del denominador DQ. Ver `data/curated/actas_anomalia_240_investigacion.parquet`.
 - **Race condition daily_refresh ↔ snapshot_actas**: resuelto con `PipelineLock` (fcntl advisory) en `data/state/.pipeline_lock`.
 - **Drift curated vs aggregates >17h** inicial → ≤90 min tras re-snapshot full y aggregates loop.
 

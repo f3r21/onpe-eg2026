@@ -167,7 +167,7 @@ Esto permite cruzar actas sin depender de IDs opacos de ONPE.
 
 ## Anomalías documentadas
 
-- **240 actas C sin `detalle[]`**: 100% clasificadas como mesa NO instalada (`codigoEstadoActa=C` + `estadoActa=N` + `detalle=[]`). Son 48 mesas × 5 elecciones del voto exterior que nunca se instalaron. Cerrada en task #58. Reporte en `data/curated/actas_anomalia_240_investigacion.parquet`.
+- **240 actas C sin `detalle[]`**: 100% clasificadas como mesa NO instalada (`codigoEstadoActa=C` + `estadoActa=N` + `detalle=[]`). Son 48 mesas × 5 elecciones del voto exterior que nunca se instalaron. Reporte en `data/curated/actas_anomalia_240_investigacion.parquet`.
 
 - **19 actas no-C con totales no-null**: ruido documentado, no bloqueante.
 

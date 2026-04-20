@@ -37,7 +37,7 @@ import polars as pl
 
 from onpe.client import OnpeClient, OnpeError
 from onpe.endpoints import acta_detalle, id_acta
-from onpe.schemas import SchemaDriftError, validate_chunk
+from onpe.schemas import SCHEMAS, SchemaDriftError, validate_chunk
 from onpe.storage import (
     DATA_DIR,
     FACT_DIR,
@@ -181,52 +181,20 @@ _ARCHIVOS_COLS: tuple[str, ...] = (
 _SPECIAL_DESCRIPTIONS = ("VOTOS EN BLANCO", "VOTOS NULOS", "VOTOS IMPUGNADOS")
 
 
-# Columnas numéricas conocidas por tabla. Si Polars infiere pl.Null porque todo
-# el chunk tiene la columna vacía (p.ej. actas P sin totales), castear a String
-# rompe luego el curated (diagonal_relaxed promueve Int|String → String). El
+# Columnas numericas conocidas por tabla. Si Polars infiere pl.Null porque todo
+# el chunk tiene la columna vacia (p.ej. actas P sin totales), castear a String
+# rompe luego el curated (diagonal_relaxed promueve Int|String -> String). El
 # mapa dice "cuando veas Null en esta columna, castea a este tipo, no a String".
 # Cualquier columna Null ausente de este mapa se asume String (tipo fallback).
+#
+# Derivado automaticamente de SCHEMAS: ambos contratos tienen que mantenerse
+# sincronizados, asi que una sola fuente de verdad evita que diverjan. Los
+# tipos numericos aqui son {Int64, Float64, Boolean}; las columnas de String
+# en SCHEMAS caen en el fallback String durante _coerce_null_columns.
+_NUMERIC_DTYPES: frozenset[pl.DataType] = frozenset({pl.Int64, pl.Float64, pl.Boolean})
 _NUMERIC_SCHEMAS: dict[str, dict[str, pl.DataType]] = {
-    "actas_cabecera": {
-        "idActa": pl.Int64,
-        "idEleccion": pl.Int64,
-        "idMesaRef": pl.Int64,
-        "totalElectoresHabiles": pl.Int64,
-        "totalVotosEmitidos": pl.Int64,
-        "totalVotosValidos": pl.Int64,
-        "totalAsistentes": pl.Int64,
-        "porcentajeParticipacionCiudadana": pl.Float64,
-        "codigoSolucionTecnologica": pl.Int64,
-        "snapshot_ts_ms": pl.Int64,
-    },
-    "actas_votos": {
-        # NOTA: `ccodigo` es String zero-padded ("00000014") en el API, no int.
-        # `nporcentajeVotosValidos` y `nporcentajeVotosEmitidos` también vienen
-        # como String formateado ("23.78"), no Float. Mantener así preserva el
-        # valor tal como ONPE lo publica; el parseo a float es responsabilidad
-        # del consumidor.
-        "idActa": pl.Int64,
-        "idEleccion": pl.Int64,
-        "es_especial": pl.Boolean,
-        "nposicion": pl.Int64,
-        "nvotos": pl.Int64,
-        "totalCandidatos": pl.Int64,
-        "snapshot_ts_ms": pl.Int64,
-    },
-    "actas_linea_tiempo": {
-        "idActa": pl.Int64,
-        "idEleccion": pl.Int64,
-        "evento_idx": pl.Int64,
-        "fechaRegistro": pl.Int64,
-        "snapshot_ts_ms": pl.Int64,
-    },
-    "actas_archivos": {
-        "idActa": pl.Int64,
-        "idEleccion": pl.Int64,
-        "tipo": pl.Int64,
-        "daudFechaCreacion": pl.Int64,
-        "snapshot_ts_ms": pl.Int64,
-    },
+    table: {col: dt for col, dt in cols.items() if dt in _NUMERIC_DTYPES}
+    for table, cols in SCHEMAS.items()
 }
 
 

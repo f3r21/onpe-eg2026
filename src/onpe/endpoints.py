@@ -1,14 +1,23 @@
 """Wrappers tipados de los endpoints ONPE.
 
-Referencia: fuentes_datos.md, apéndices A y B. Todos los paths son relativos
+Referencia: fuentes_datos.md, apendices A y B. Todos los paths son relativos
 a BASE_URL del OnpeClient.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NewType
 
 from onpe.client import OnpeClient
+
+# NewTypes de dominio: opacos para el type-checker, int/str en runtime.
+# Previenen confusion entre enteros distintos (p.ej. IdActa vs run_ts_ms) y
+# strings con formato especifico (p.ej. UbigeoDistrito 6 digitos vs nombre).
+# No agregan validacion runtime; para eso esta `_validate_archivo_id` y la
+# formula `id_acta()`.
+IdActa = NewType("IdActa", int)
+UbigeoDistrito = NewType("UbigeoDistrito", str)
+ArchivoId = NewType("ArchivoId", str)
 
 # idEleccion confirmados en vivo (18-abr-2026) vía /proceso/2/elecciones
 ELECCION_PRESIDENCIAL = 10
@@ -273,16 +282,16 @@ async def listar_actas(
     )["data"]
 
 
-def id_acta(id_mesa: int, ubigeo_distrito: str, id_eleccion: int) -> int:
-    """Construye el idActa determinísticamente. Ver fuentes_datos.md §B.4.
+def id_acta(id_mesa: int, ubigeo_distrito: str, id_eleccion: int) -> IdActa:
+    """Construye el idActa deterministicamente. Ver fuentes_datos.md seccion B.4.
 
-    Fórmula: pad(idMesa, 4) ++ pad(ubigeoDistrito, 6) ++ pad(idEleccion, 2).
+    Formula: pad(idMesa, 4) ++ pad(ubigeoDistrito, 6) ++ pad(idEleccion, 2).
     Ejemplo: id_acta(5507, "040102", 10) == 550704010210.
     """
-    return int(f"{id_mesa:04d}{int(ubigeo_distrito):06d}{id_eleccion:02d}")
+    return IdActa(int(f"{id_mesa:04d}{int(ubigeo_distrito):06d}{id_eleccion:02d}"))
 
 
-async def acta_detalle(c: OnpeClient, acta_id: int) -> dict[str, Any]:
+async def acta_detalle(c: OnpeClient, acta_id: IdActa | int) -> dict[str, Any]:
     """Detalle completo de una mesa-elección.
 
     Si el idActa no corresponde a una mesa existente, devuelve 200 OK con

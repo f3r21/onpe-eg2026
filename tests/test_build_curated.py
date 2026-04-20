@@ -111,9 +111,10 @@ def test_build_curated_dedup_max_run_ts_ms(tmp_data_root: Path):
     _write_chunk(tmp_data_root / "facts", "actas_cabecera", 2000, 0, _minimal_cabecera(999, 2000))
     _write_chunk(tmp_data_root / "facts", "actas_votos", 2000, 0, _minimal_votos(999, 2000))
 
-    df_cab, latest = build_cabecera(dry_run=False)
-    assert df_cab.height == 1, "dedup debe dejar 1 fila"
-    assert df_cab["snapshot_ts_ms"][0] == 2000, "se queda con run_ts_ms mayor"
+    n_cab, latest = build_cabecera(dry_run=False)
+    assert n_cab == 1, "dedup debe dejar 1 fila"
+    cab_out = pl.read_parquet(tmp_data_root / "curated" / "actas_cabecera.parquet")
+    assert cab_out["snapshot_ts_ms"][0] == 2000, "se queda con run_ts_ms mayor"
 
     n_votos = build_votos(latest, dry_run=False)
     assert n_votos == 2  # 2 filas del run 2
@@ -147,8 +148,9 @@ def test_build_curated_multiples_actas_multiples_runs(tmp_data_root: Path):
     _write_chunk(tmp_data_root / "facts", "actas_cabecera", 300, 0, _minimal_cabecera(200, 300))
     _write_chunk(tmp_data_root / "facts", "actas_votos", 300, 0, _minimal_votos(200, 300))
 
-    df_cab, _latest = build_cabecera(dry_run=False)
-    assert df_cab.height == 2
-    por_acta = {row["idActa"]: row["snapshot_ts_ms"] for row in df_cab.iter_rows(named=True)}
+    n_cab, _latest = build_cabecera(dry_run=False)
+    assert n_cab == 2
+    cab_out = pl.read_parquet(tmp_data_root / "curated" / "actas_cabecera.parquet")
+    por_acta = {row["idActa"]: row["snapshot_ts_ms"] for row in cab_out.iter_rows(named=True)}
     assert por_acta[100] == 500  # max run para acta 100
     assert por_acta[200] == 300  # solo un run para acta 200

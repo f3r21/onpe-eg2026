@@ -12,10 +12,10 @@ from onpe.client import ClientConfig, OnpeClient
 from onpe.endpoints import proceso_activo
 
 # Wall-clock cap del run. Un snapshot OK tarda ~30-60s; 300s cubre retries
-# exponenciales + latencia ONPE. Si se excede, es deadlock o degradación severa:
-# abortamos para que launchd recicle al próximo tick (StartInterval=900).
-# Evita el failure mode observado 2026-04-19 donde un HTTP/2 500 dejó el
-# proceso colgado 9h sin ningún snapshot.
+# exponenciales + latencia ONPE. Si se excede, es deadlock o degradacion severa:
+# abortamos para que launchd recicle al proximo tick (StartInterval=900).
+# Previene el failure mode donde un HTTP/2 500 deja el proceso colgado
+# indefinidamente sin escribir parquets ni reciclar via launchd.
 _RUN_TIMEOUT_S = 300.0
 
 
@@ -46,7 +46,12 @@ def _entrypoint() -> int:
             "timeout %.0fs alcanzado. abortando para que launchd relance.",
             _RUN_TIMEOUT_S,
         )
-        return 124  # convención: timeout
+        return 124  # convencion: timeout
+    except asyncio.CancelledError:
+        # CancelledError hereda de BaseException en Python 3.8+, no la capturaria
+        # el except Exception de abajo. Listada explicitamente para clarity del
+        # lector: cancelacion externa (Ctrl+C, wait_for interno) debe propagar.
+        raise
     except Exception:
         log.exception("snapshot_aggregates fallo. launchd relanzara en ~15min")
         return 1

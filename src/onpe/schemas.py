@@ -1,7 +1,7 @@
 """Schemas esperados por tabla — fail-fast contra type drift de ONPE.
 
-Los schemas fueron derivados empíricamente del curated 2026-04-18 (snapshot
-post-elección, 463,830 actas × 5 elecciones; 10/10 PASS en DQ Nivel 1+2).
+Los schemas fueron derivados empiricamente del curated post-eleccion 2026
+(463,830 actas x 5 elecciones; todos los checks DQ N1+N2+N3 en PASS).
 Si ONPE cambia tipos sin aviso, `validate_chunk()` detecta el drift antes
 de escribir el chunk al parquet y propaga `SchemaDriftError` para que
 el loop lo atrape y salte el chunk sin contaminar el facts layer.
