@@ -249,7 +249,7 @@ Estado al 2026-04-20:
 
 **Completado 2026-04-19 adicional**:
 - D3 datosabiertos: monitor + ingest skeleton + DQ Nivel 4 (2 checks). Flag `--nivel 4` en dq_check.py. Baseline 50 datasets guardados. Deferred hasta publicación ONPE real (~2-4 sem post-JNE).
-- D4 histórico EG2021: ingestado desde jmcastagnetto (archivado). 86k actas mesa 1ra vuelta + distrital generales/resumen/votos/partidos/participación. Solo 1ra vuelta disponible; UBIGEO RENIEC (no INEI).
+- D4 histórico EG2021: **REMOVIDO del scope (2026-04-20)**. Dataset v1.0 queda laser-focused en EG2026 primera vuelta con fuentes oficiales solamente. Histórico podrá publicarse aparte como dataset complementario `onpe-eg2021` si se retoma.
 
 **Deferred (fuera de scope del 100%)**:
 - Padrón RENIEC por distrito (enriquecimiento posterior, confirmado con user)
