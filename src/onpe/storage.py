@@ -13,7 +13,7 @@ Dos tipos de tablas:
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -28,16 +28,16 @@ FACT_DIR = DATA_DIR / "facts"
 
 
 def utc_now_ms() -> int:
-    return int(datetime.now(timezone.utc).timestamp() * 1000)
+    return int(datetime.now(UTC).timestamp() * 1000)
 
 
 def ms_to_lima_date(ms: int) -> str:
     """Convierte epoch ms a YYYY-MM-DD en hora Lima (UTC-5)."""
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).astimezone(TZ_LIMA).strftime("%Y-%m-%d")
+    return datetime.fromtimestamp(ms / 1000, tz=UTC).astimezone(TZ_LIMA).strftime("%Y-%m-%d")
 
 
 def ms_to_lima_iso(ms: int) -> str:
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).astimezone(TZ_LIMA).isoformat()
+    return datetime.fromtimestamp(ms / 1000, tz=UTC).astimezone(TZ_LIMA).isoformat()
 
 
 def write_dim(name: str, df: pl.DataFrame) -> Path:

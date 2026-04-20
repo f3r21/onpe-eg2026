@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import httpx
-import pytest
 
 from onpe.datosabiertos import (
     Dataset,
@@ -22,7 +21,7 @@ def _make_listing_html(datasets: list[tuple[str, str]]) -> bytes:
     return f"""<!DOCTYPE html><html><body>
         <div class="view-content">
         {articles}
-        </div></body></html>""".encode("utf-8")
+        </div></body></html>""".encode()
 
 
 def _make_mock_client(body: bytes, status: int = 200) -> httpx.Client:

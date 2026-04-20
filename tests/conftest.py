@@ -23,7 +23,7 @@ SMOKE_DIR = Path(__file__).resolve().parent.parent / "data" / "smoke"
 @pytest.fixture(scope="session")
 def smoke_dir() -> Path:
     if not SMOKE_DIR.exists():
-        pytest.skip(f"data/smoke/ no existe — correr `uv run python scripts/smoke.py` antes.")
+        pytest.skip("data/smoke/ no existe — correr `uv run python scripts/smoke.py` antes.")
     return SMOKE_DIR
 
 

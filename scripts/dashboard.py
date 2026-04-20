@@ -23,8 +23,7 @@ import argparse
 import html
 import json
 import logging
-import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -500,7 +499,7 @@ def render_dashboard() -> str:
         drift_str = f'<span class="fail">{drift:+.1f} min</span>'
 
     return HTML_TEMPLATE.format(
-        generated=datetime.now(timezone.utc).astimezone(TZ_LIMA).isoformat(timespec="seconds"),
+        generated=datetime.now(UTC).astimezone(TZ_LIMA).isoformat(timespec="seconds"),
         drift_str=drift_str,
         coverage_cards=cov_cards,
         estado_rows=_render_estado(estado),

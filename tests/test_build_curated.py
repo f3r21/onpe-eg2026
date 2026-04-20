@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -107,7 +106,7 @@ def test_build_curated_dedup_max_run_ts_ms(tmp_data_root: Path):
 
 def test_build_curated_skip_tablas_vacias(tmp_data_root: Path):
     """Si facts/actas_linea_tiempo/ no tiene chunks, skip sin error."""
-    from build_curated import build_cabecera, _build_aux
+    from build_curated import _build_aux, build_cabecera
 
     _write_chunk(tmp_data_root / "facts", "actas_cabecera", 1000, 0, _minimal_cabecera(1, 1000))
 
@@ -119,7 +118,7 @@ def test_build_curated_skip_tablas_vacias(tmp_data_root: Path):
 
 def test_build_curated_multiples_actas_multiples_runs(tmp_data_root: Path):
     """2 actas, 2 runs c/u — cada una dedupa a su max run."""
-    from build_curated import build_cabecera, build_votos
+    from build_curated import build_cabecera
 
     # Acta 100: run 100 (antiguo) + run 500 (reciente)
     _write_chunk(tmp_data_root / "facts", "actas_cabecera", 100, 0, _minimal_cabecera(100, 100))

@@ -19,7 +19,7 @@ numérico usado para coerción de columnas pl.Null).
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 
 import polars as pl
 

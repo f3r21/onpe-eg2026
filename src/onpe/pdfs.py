@@ -20,11 +20,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import httpx
 from tenacity import (
@@ -34,7 +32,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from onpe.client import OnpeClient, OnpeError, OnpeTransientError
+from onpe.client import OnpeClient, OnpeError
 
 log = logging.getLogger(__name__)
 
@@ -178,7 +176,7 @@ def gcs_object_name(archivo_id: str, elecciones: str = "eg2026") -> str:
 
 
 async def upload_to_gcs_from_url(
-    http_session: "httpx.AsyncClient",
+    http_session: httpx.AsyncClient,
     signed_url: str,
     bucket,  # google.cloud.storage.Bucket
     object_name: str,
@@ -201,7 +199,6 @@ async def upload_to_gcs_from_url(
     Returns:
         bytes uploaded.
     """
-    import asyncio
     import io
 
     buf = io.BytesIO()
@@ -225,7 +222,6 @@ async def upload_to_gcs_from_url(
 
 async def _blob_exists_async(bucket, object_name: str) -> tuple[bool, int]:
     """Check blob existence en thread pool (sync call blocks event loop)."""
-    import asyncio
 
     def _check() -> tuple[bool, int]:
         blob = bucket.blob(object_name)
@@ -239,12 +235,12 @@ async def _blob_exists_async(bucket, object_name: str) -> tuple[bool, int]:
 
 async def download_pdf_to_gcs(
     onpe: OnpeClient,
-    s3_session: "httpx.AsyncClient",
+    s3_session: httpx.AsyncClient,
     bucket,
     archivo_id: str,
     *,
     skip_existing: bool = True,
-) -> "DownloadResult":
+) -> DownloadResult:
     """Pipeline completo GCS: fetch signed URL → stream upload to GCS."""
     object_name = gcs_object_name(archivo_id)
     dst_path = Path(f"gs://{bucket.name}/{object_name}")

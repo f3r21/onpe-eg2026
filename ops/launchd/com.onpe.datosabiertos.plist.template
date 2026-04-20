@@ -9,7 +9,7 @@
   <array>
     <string>/bin/bash</string>
     <string>-c</string>
-    <string>cd /Users/99/Developer/Claude/Projects/Elecciones2026 &amp;&amp; PATH="/usr/local/bin:/opt/homebrew/bin:$PATH" /opt/homebrew/bin/uv run python scripts/monitor_datosabiertos.py</string>
+    <string>cd __REPO_ROOT__ &amp;&amp; PATH="__UV_DIR__:/usr/local/bin:/opt/homebrew/bin:$PATH" __UV_BIN__ run python scripts/monitor_datosabiertos.py</string>
   </array>
 
   <!-- Cada lunes 9am -->
@@ -24,10 +24,10 @@
   </dict>
 
   <key>StandardOutPath</key>
-  <string>/Users/99/Developer/Claude/Projects/Elecciones2026/logs/launchd_datosabiertos.log</string>
+  <string>__REPO_ROOT__/logs/launchd_datosabiertos.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/Users/99/Developer/Claude/Projects/Elecciones2026/logs/launchd_datosabiertos.log</string>
+  <string>__REPO_ROOT__/logs/launchd_datosabiertos.log</string>
 
   <key>ProcessType</key>
   <string>Background</string>

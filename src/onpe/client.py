@@ -77,7 +77,7 @@ class OnpeClient:
         self._last_request_at: float = 0.0
         self._rate_lock = asyncio.Lock()
 
-    async def __aenter__(self) -> "OnpeClient":
+    async def __aenter__(self) -> OnpeClient:
         self._client = httpx.AsyncClient(
             base_url=self.config.base_url,
             headers=DEFAULT_HEADERS,

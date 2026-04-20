@@ -67,7 +67,7 @@ Primera release pública del dataset electoral EG2026 + tooling open source.
 - **Voto preferencial** (D5): sin endpoint API ONPE. Disponible solo en PDFs de acta de escrutinio (tipo 1). Excluido del 100% actual, opción OCR deferred.
 - **DQ Nivel 4** (reconciliación oficial): placeholder hasta publicación ONPE en datosabiertos.gob.pe (~4 semanas post-proclamación JNE). Monitor semanal activo.
 - **Mapeo RENIEC ↔ ONPE ubigeos**: EG2021 usa RENIEC (INEI-like), EG2026 usa ONPE propio. Comparativa a nivel distrito individual requiere tabla mapping (deferred).
-- **PDFs binarios en GCS**: descarga en curso (~725k PDFs, ~1 TB) en `gs://onpe-eg2026-pdfs-v2`. ETA ~2-3 días post-release. No bloquea el dataset estructurado.
+- **PDFs binarios en GCS**: descarga en curso (~725k PDFs, ~1 TB) en un bucket GCS configurable vía `--gcs-bucket gs://<tu-bucket>`. ETA ~2-3 días post-release. No bloquea el dataset estructurado.
 
 ---
 

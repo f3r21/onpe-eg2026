@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from pathlib import Path
+from datetime import UTC
 
 import polars as pl
 
@@ -540,9 +540,10 @@ def main() -> None:
     total_dist = sum(len(v["features"]) for v in dist_by_prov.values())
     log.info("  distritos total embebidos: %d", total_dist)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from onpe.storage import TZ_LIMA
-    built_at = datetime.now(timezone.utc).astimezone(TZ_LIMA).isoformat(timespec="seconds")
+    built_at = datetime.now(UTC).astimezone(TZ_LIMA).isoformat(timespec="seconds")
     meta = {"built_at": built_at, "n_actas": cab.height}
 
     html = render_html(peru_low, prov_by_depto, dist_by_prov, meta)
