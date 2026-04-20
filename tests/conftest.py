@@ -89,14 +89,6 @@ def snapshot_ts_ms() -> int:
 
 
 @pytest.fixture
-def tmp_facts_dir(tmp_path: Path) -> Path:
-    """Directorio temporal que simula la estructura data/facts/."""
-    facts = tmp_path / "facts"
-    facts.mkdir()
-    return facts
-
-
-@pytest.fixture
 def sample_cabecera_df() -> pl.DataFrame:
     """DataFrame mínimo válido contra SCHEMAS['actas_cabecera']."""
     return pl.DataFrame(

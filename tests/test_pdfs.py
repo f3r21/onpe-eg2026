@@ -97,9 +97,11 @@ def test_fetch_signed_url_parse_respuesta_ok():
     )
 
     async def run():
-        url = await fetch_signed_url(mock, "abc123")
+        url = await fetch_signed_url(mock, "69dce34ad7b6147f63e6fe04")
         assert url.startswith("https://")
-        mock.get_json.assert_awaited_once_with("/actas/file", params={"id": "abc123"})
+        mock.get_json.assert_awaited_once_with(
+            "/actas/file", params={"id": "69dce34ad7b6147f63e6fe04"}
+        )
 
     asyncio.run(run())
 
@@ -119,7 +121,7 @@ def test_fetch_signed_url_success_false_raises():
 
     async def run():
         with pytest.raises(OnpeError, match="success=false"):
-            await fetch_signed_url(mock, "abc123")
+            await fetch_signed_url(mock, "69dce34ad7b6147f63e6fe04")
 
     asyncio.run(run())
 
@@ -136,7 +138,46 @@ def test_fetch_signed_url_data_invalido_raises():
     mock.get_json = AsyncMock(return_value={"success": True, "data": "not-a-url"})
 
     async def run():
-        with pytest.raises(OnpeError, match="URL firmada inválida"):
-            await fetch_signed_url(mock, "abc123")
+        with pytest.raises(OnpeError, match="URL firmada invalida"):
+            await fetch_signed_url(mock, "69dce34ad7b6147f63e6fe04")
 
     asyncio.run(run())
+
+
+def test_fetch_signed_url_archivoid_invalido_rechaza():
+    """archivoId fuera del formato hex-24 se rechaza antes de hacer request."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from onpe.client import OnpeError
+    from onpe.pdfs import fetch_signed_url
+
+    mock = AsyncMock()
+    mock.get_json = AsyncMock()  # nunca deberia llamarse
+
+    async def run():
+        with pytest.raises(OnpeError, match="archivoId invalido"):
+            await fetch_signed_url(mock, "../etc/passwd")
+        with pytest.raises(OnpeError, match="archivoId invalido"):
+            await fetch_signed_url(mock, "abc")  # muy corto
+        with pytest.raises(OnpeError, match="archivoId invalido"):
+            await fetch_signed_url(mock, "z" * 24)  # no-hex
+        mock.get_json.assert_not_awaited()
+
+    asyncio.run(run())
+
+
+def test_download_result_invariant_failed_requiere_error():
+    """DownloadResult con status=failed sin error levanta ValueError."""
+    from onpe.pdfs import DownloadResult
+
+    with pytest.raises(ValueError, match="error != None"):
+        DownloadResult("x", Path("/x"), 0, "failed", error=None)
+
+
+def test_download_result_invariant_success_sin_error():
+    """DownloadResult con status=downloaded + error!=None levanta ValueError."""
+    from onpe.pdfs import DownloadResult
+
+    with pytest.raises(ValueError, match="no debe tener error"):
+        DownloadResult("x", Path("/x"), 1024, "downloaded", error="spurious")

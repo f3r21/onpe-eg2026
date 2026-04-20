@@ -60,12 +60,25 @@ def download_resource(url: str, dst: Path) -> Path:
 
 
 def extract_zip(zip_path: Path, dst_dir: Path) -> list[Path]:
-    """Unzip → lista de archivos extraídos."""
+    """Unzip -> lista de archivos extraidos.
+
+    Protege contra zip slip (CWE-22): rechaza miembros cuyo path resuelto
+    escape de dst_dir. Necesario aunque datosabiertos.gob.pe sea una fuente
+    oficial, porque es una dependencia externa fuera de nuestro control.
+    """
     extracted: list[Path] = []
+    dst_resolved = dst_dir.resolve()
     with zipfile.ZipFile(zip_path) as z:
         for name in z.namelist():
             if name.endswith("/"):
                 continue  # skip dirs
+            member_resolved = (dst_dir / name).resolve()
+            try:
+                member_resolved.relative_to(dst_resolved)
+            except ValueError as e:
+                raise ValueError(
+                    f"zip slip detectado: {name!r} escaparia {dst_dir} en {zip_path}"
+                ) from e
             z.extract(name, dst_dir)
             extracted.append(dst_dir / name)
     log.info("unzip %s: %d archivos", zip_path.name, len(extracted))
