@@ -11,6 +11,12 @@ Con límite (smoke test, 50 actas):
 
 Reanudar un run previo:
     uv run python scripts/snapshot_actas.py --resume 1776492170298
+
+Descarga distribuida entre varios hosts (particion por mesa):
+    Mac:       uv run python scripts/snapshot_actas.py --shard 0/3
+    Win PC1:   uv run python scripts/snapshot_actas.py --shard 1/3
+    Win PC2:   uv run python scripts/snapshot_actas.py --shard 2/3
+    Cada worker cubre ~33% de las mesas (todas sus 5 elecciones juntas).
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from onpe.client import ClientConfig, OnpeClient
 from onpe.endpoints import AMBITOS_TODOS
 from onpe.locks import LockHeldError, PipelineLock
 from onpe.storage import DIM_DIR
+from onpe.utils import parse_shard_spec, shard_of
 
 
 async def main() -> None:
@@ -40,6 +47,17 @@ async def main() -> None:
         type=str,
         default=",".join(str(a) for a in AMBITOS_TODOS),
         help="idAmbitoGeografico a incluir, comma-separated. Default: todos (1,2)",
+    )
+    parser.add_argument(
+        "--shard",
+        type=str,
+        default=None,
+        metavar="M/N",
+        help=(
+            "particion distribuida por mesa: worker M de N. "
+            "Filtra mesas via md5(idMesa) %% N == M. Cada mesa trae sus 5 elecciones "
+            "al mismo worker. Ej: --shard 0/3 Mac, --shard 1/3 Win1, --shard 2/3 Win2."
+        ),
     )
     args = parser.parse_args()
 
@@ -64,6 +82,23 @@ async def main() -> None:
         log.warning(
             "mesas.parquet legacy sin idAmbitoGeografico; ignorando --ambitos=%s",
             ambitos,
+        )
+
+    if args.shard:
+        shard_m, shard_n = parse_shard_spec(args.shard)
+        total_pre = len(df_mesas)
+        df_mesas = df_mesas.filter(
+            pl.col("idMesa")
+            .cast(pl.Utf8)
+            .map_elements(lambda s: shard_of(s, shard_n) == shard_m, return_dtype=pl.Boolean)
+        )
+        log.info(
+            "shard %d/%d: %d mesas (de %d, ~%.1f%% esperado) x 5 elecciones",
+            shard_m,
+            shard_n,
+            len(df_mesas),
+            total_pre,
+            100 / shard_n,
         )
 
     cfg_http = ClientConfig(max_concurrent=args.concurrency, rate_per_second=args.rps)
