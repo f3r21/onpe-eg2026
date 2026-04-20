@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: "If you use this dataset, please cite it as below."
+type: dataset
+title: "onpe-eg2026: Dataset de las Elecciones Generales del Perú 2026 Primera Vuelta"
+abstract: >-
+  Dataset estructurado de los resultados de las Elecciones Generales del Perú
+  2026 primera vuelta (12 de abril de 2026), derivado del API reverse-engineered
+  de ONPE. Incluye 463,830 actas × 5 elecciones simultáneas (Presidencial,
+  Parlamento Andino, Diputados, Senadores nacional/regional), ~18.6M filas de
+  votos individuales por agrupación política, serie temporal de aggregates
+  capturada cada 15 minutos durante el conteo, metadata de 811k PDFs
+  escaneados, 222 GeoJSONs oficiales ONPE, y validación de calidad en 4
+  niveles. Publicado con licencia CC-BY 4.0 (datos) + MIT (código).
+authors:
+  - alias: f3r21
+    website: https://github.com/f3r21
+license: CC-BY-4.0
+license-url: https://creativecommons.org/licenses/by/4.0/
+repository-code: "https://github.com/f3r21/onpe-eg2026"
+version: "1.0.0"
+date-released: "2026-04-19"
+keywords:
+  - elections
+  - Peru
+  - EG2026
+  - ONPE
+  - open-data
+  - electoral-data
+  - political-science
+  - Latin-America
+  - data-quality
+  - Polars
+  - Parquet
+identifiers:
+  - type: url
+    value: "https://github.com/f3r21/onpe-eg2026/releases/tag/v1.0.0"
+    description: "GitHub Release v1.0.0"
+references:
+  - type: data
+    title: "ONPE — Oficina Nacional de Procesos Electorales del Perú"
+    url: "https://www.onpe.gob.pe/"
+    abstract: "Fuente primaria oficial de los datos electorales peruanos."
+preferred-citation:
+  type: dataset
+  title: "onpe-eg2026: Dataset de las Elecciones Generales del Perú 2026 Primera Vuelta"
+  authors:
+    - alias: f3r21
+  version: "1.0.0"
+  year: 2026
+  url: "https://github.com/f3r21/onpe-eg2026"
+  license: CC-BY-4.0
+  abstract: >-
+    463,830 actas × 5 elecciones · 18.6M votos · 811k PDFs · 222 GeoJSONs.
+    Scrape reverse-engineered de ONPE con validación DQ en 4 niveles.
