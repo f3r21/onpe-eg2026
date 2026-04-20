@@ -1,8 +1,8 @@
 """Consolida los snapshots crudos de actas en una capa curada dedupada.
 
 Lee todos los chunks Hive-particionados de `data/facts/actas_cabecera` y
-`data/facts/actas_votos`, se queda con el run_ts_ms más reciente por idActa
-(para cabecera; los votos heredan ese filtro por anti-join) y escribe un único
+`data/facts/actas_votos`, se queda con el run_ts_ms mas reciente por idActa
+(para cabecera; los votos heredan ese filtro por anti-join) y escribe un unico
 Parquet por tabla en `data/curated/`.
 
 Uso:
@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 import polars as pl
+import polars.selectors as cs
 
+from onpe.enrich import enrich_cabecera, validate_integrity
 from onpe.storage import DATA_DIR
 
 CURATED_DIR = DATA_DIR / "curated"
@@ -28,9 +31,17 @@ FACTS_ARCH = DATA_DIR / "facts" / "actas_archivos"
 
 logger = logging.getLogger("curated")
 
+# Columnas virtuales que polars inyecta al escanear con hive_partitioning=True.
+# Usamos selectors para dropearlas sin hardcodear si alguno falta (require_all=False).
+_HIVE_PARTITION_COLS = ("snapshot_date", "run_ts_ms")
+
+
+def _drop_hive_cols(lf: pl.LazyFrame) -> pl.LazyFrame:
+    return lf.drop(cs.by_name(*_HIVE_PARTITION_COLS, require_all=False))
+
 
 def _latest_run_per_idacta(lf: pl.LazyFrame) -> pl.LazyFrame:
-    """Para cada idActa, el run_ts_ms más reciente. Key semi-join eficiente."""
+    """Para cada idActa, el run_ts_ms mas reciente. Key semi-join eficiente."""
     return lf.group_by("idActa").agg(pl.col("run_ts_ms").max())
 
 
@@ -42,7 +53,7 @@ def _scan_relaxed(base_dir: Path) -> pl.LazyFrame:
     Presidencial, o la columna legacy `idMesa` que el API nunca devuelve).
     Concatenar con el glob default falla al mezclarse con chunks donde la
     misma columna es String. `diagonal_relaxed` promueve Null al supertipo
-    (String) en la unión.
+    (String) en la union.
     """
     paths = sorted(base_dir.glob("**/*.parquet"))
     if not paths:
@@ -51,7 +62,7 @@ def _scan_relaxed(base_dir: Path) -> pl.LazyFrame:
     return pl.concat(lfs, how="diagonal_relaxed")
 
 
-# Columnas legacy que existen en chunks históricos pero no aportan información
+# Columnas legacy que existen en chunks historicos pero no aportan informacion
 # (100% null) y contaminan el schema del curated. Se droppean si aparecen.
 _LEGACY_DROP_IF_PRESENT = ("idMesa",)
 
@@ -62,36 +73,41 @@ def _drop_legacy(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.drop(to_drop) if to_drop else lf
 
 
-def build_cabecera(dry_run: bool) -> tuple[pl.DataFrame, pl.DataFrame]:
+def build_cabecera(dry_run: bool) -> tuple[int, pl.DataFrame]:
+    """Escribe curated/actas_cabecera. Retorna (n_filas_curadas, latest_df).
+
+    `latest_df` (idActa, run_ts_ms) se usa despues para filtrar votos/linea_tiempo/
+    archivos via semi-join. El DataFrame completo de cabecera NO se retorna:
+    caller que lo necesite lo relee desde disco.
+    """
     lf = _drop_legacy(_scan_relaxed(FACTS_CAB))
     raw = lf.select(pl.len()).collect().item()
 
     latest = _latest_run_per_idacta(lf)
-    df = (
-        lf.join(latest, on=["idActa", "run_ts_ms"], how="semi")
-        .drop("snapshot_date", "run_ts_ms")
-        .collect()
-    )
-    logger.info("cabecera: %d filas crudas -> %d filas curadas", raw, df.height)
+    plan = _drop_hive_cols(lf.join(latest, on=["idActa", "run_ts_ms"], how="semi"))
 
-    if not dry_run:
-        CURATED_DIR.mkdir(parents=True, exist_ok=True)
-        out = CURATED_DIR / "actas_cabecera.parquet"
-        df.write_parquet(out, compression="zstd")
-        logger.info("escrito: %s (%.1f MB)", out, out.stat().st_size / 1e6)
+    if dry_run:
+        n = plan.select(pl.len()).collect().item()
+        logger.info("cabecera: %d filas crudas -> %d filas curadas", raw, n)
+        return n, latest.collect()
 
-    return df, latest.collect()
+    CURATED_DIR.mkdir(parents=True, exist_ok=True)
+    out = CURATED_DIR / "actas_cabecera.parquet"
+    df = plan.collect()
+    n = df.height
+    df.write_parquet(out, compression="zstd")
+    logger.info("cabecera: %d filas crudas -> %d filas curadas", raw, n)
+    logger.info("escrito: %s (%.1f MB)", out, out.stat().st_size / 1e6)
+    return n, latest.collect()
 
 
 def build_votos(latest: pl.DataFrame, dry_run: bool) -> int:
     lf = _scan_relaxed(FACTS_VOT)
     raw = lf.select(pl.len()).collect().item()
 
-    # Filtrar votos al run_ts_ms ganador de cada idActa (el más reciente que
+    # Filtrar votos al run_ts_ms ganador de cada idActa (el mas reciente que
     # vimos en cabecera). Evita sort+unique global sobre ~18M filas.
-    plan = lf.join(latest.lazy(), on=["idActa", "run_ts_ms"], how="semi").drop(
-        "snapshot_date", "run_ts_ms"
-    )
+    plan = _drop_hive_cols(lf.join(latest.lazy(), on=["idActa", "run_ts_ms"], how="semi"))
 
     if dry_run:
         n = plan.select(pl.len()).collect().item()
@@ -119,9 +135,7 @@ def _build_aux(table_name: str, base_dir: Path, latest: pl.DataFrame, dry_run: b
 
     lf = _scan_relaxed(base_dir)
     raw = lf.select(pl.len()).collect().item()
-    plan = lf.join(latest.lazy(), on=["idActa", "run_ts_ms"], how="semi").drop(
-        "snapshot_date", "run_ts_ms"
-    )
+    plan = _drop_hive_cols(lf.join(latest.lazy(), on=["idActa", "run_ts_ms"], how="semi"))
 
     if dry_run:
         n = plan.select(pl.len()).collect().item()
@@ -136,7 +150,7 @@ def _build_aux(table_name: str, base_dir: Path, latest: pl.DataFrame, dry_run: b
     return n
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="no escribe archivos")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -152,10 +166,18 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    cab, latest = build_cabecera(args.dry_run)
-    n_votos = build_votos(latest, args.dry_run)
-    _build_aux("actas_linea_tiempo", FACTS_LT, latest, args.dry_run)
-    _build_aux("actas_archivos", FACTS_ARCH, latest, args.dry_run)
+    try:
+        n_cab, latest = build_cabecera(args.dry_run)
+        n_votos = build_votos(latest, args.dry_run)
+        _build_aux("actas_linea_tiempo", FACTS_LT, latest, args.dry_run)
+        _build_aux("actas_archivos", FACTS_ARCH, latest, args.dry_run)
+    except FileNotFoundError as e:
+        logger.critical(
+            "falta insumo para build_curated: %s. "
+            "Correr primero snapshot_actas.py o daily_refresh.py.",
+            e,
+        )
+        return 1
 
     # Sanity (solo si ya tenemos votos escritos)
     if not args.dry_run:
@@ -167,31 +189,26 @@ def main() -> None:
         )
         logger.info(
             "coherencia: cabecera=%d, votos_filas=%d, votos_actas_unicas=%d, cabecera_sin_votos=%d",
-            cab.height,
+            n_cab,
             n_votos,
             vot_ids,
-            cab.height - vot_ids,
+            n_cab - vot_ids,
         )
 
     # Enriquecimiento: agrega idAmbitoGeografico + idDistritoElectoral + ubigeoDepartamento/Provincia
     # + nombreDistrito desde dim/mesas. Idempotente (re-run dropa cols previas antes de join).
     if not args.dry_run and not args.no_enrich:
-        # Import local: enrich_curated está en scripts/ (mismo dir), no en el pythonpath por defecto.
-        import sys
-
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from enrich_curated import _validate_integrity, enrich_cabecera
-
         logger.info("enriqueciendo curated con idAmbitoGeografico + idDistritoElectoral")
         df_cab = pl.read_parquet(CURATED_DIR / "actas_cabecera.parquet")
         df_mesas = pl.read_parquet(DATA_DIR / "dim" / "mesas.parquet")
         enriched = enrich_cabecera(df_cab, df_mesas)
-        _validate_integrity(enriched)
+        validate_integrity(enriched)
         tmp = CURATED_DIR / "actas_cabecera.parquet.tmp"
         enriched.write_parquet(tmp, compression="zstd")
         tmp.replace(CURATED_DIR / "actas_cabecera.parquet")
         logger.info("curated enriquecido: +%d cols", len(enriched.columns) - len(df_cab.columns))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -1,4 +1,4 @@
-"""Diagnóstico de las 240 actas C sin detalle — task #58.
+"""Diagnostico de las 240 actas C sin detalle (anomalia cerrada).
 
 Fenómeno observado al 2026-04-18 (pre-re-snapshot): 240 actas en estado
 C (Contabilizada) pero con estadoActa=N, sin `detalle[]` en la respuesta

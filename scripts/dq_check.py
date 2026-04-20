@@ -41,10 +41,13 @@ class CheckResult:
     name: str
     passed: bool
     detail: str
+    skipped: bool = False  # Ni PASS ni FAIL; check aplicable pero requiere datos externos.
 
 
-def _fmt(ok: bool) -> str:
-    return "PASS" if ok else "FAIL"
+def _fmt(r: CheckResult) -> str:
+    if r.skipped:
+        return "SKIP"
+    return "PASS" if r.passed else "FAIL"
 
 
 # ---- Nivel 1 --------------------------------------------------------------
@@ -521,19 +524,23 @@ def nivel4_reconciliacion_votos_por_partido() -> CheckResult:
     oficiales = sorted((CAB.parent).glob("datosabiertos_eg2026_*.parquet"))
     if not oficiales:
         return CheckResult(
-            "reconciliación votos por partido × distrito × elección",
-            False,
-            "SKIPPED — no hay parquet oficial aún",
+            "reconciliacion votos por partido x distrito x eleccion",
+            passed=False,
+            detail="SKIPPED - no hay parquet oficial aun en data/curated/",
+            skipped=True,
         )
-    # TODO: cuando haya data real, implementar:
-    # - join curated actas_votos agregado por (idEleccion × idDistritoElectoral × partido)
+    # Pendiente: cuando haya data real, implementar:
+    # - join curated actas_votos agregado por (idEleccion x idDistritoElectoral x partido)
     # - vs oficial datosabiertos agregado mismas dimensiones
-    # - delta ≤ 1 voto por grupo
+    # - delta <= 1 voto por grupo
     return CheckResult(
-        "reconciliación votos (skeleton)",
-        False,
-        f"TODO — implementar cuando schema oficial esté disponible. "
-        f"Encontrados: {len(oficiales)} parquet(s)",
+        "reconciliacion votos (skeleton)",
+        passed=False,
+        detail=(
+            "PENDIENTE - implementar cuando schema oficial este disponible. "
+            f"Encontrados: {len(oficiales)} parquet(s)"
+        ),
+        skipped=True,
     )
 
 
@@ -577,12 +584,21 @@ def main() -> int:
     log.info("\n%-6s %-6s %-40s %s", "NIVEL", "RES", "CHECK", "DETALLE")
     log.info("-" * 100)
     failed = 0
+    skipped = 0
     for nivel, r in results:
-        log.info("%-6d %-6s %-40s %s", nivel, _fmt(r.passed), r.name, r.detail.replace("\n", " | "))
-        if not r.passed:
+        log.info("%-6d %-6s %-40s %s", nivel, _fmt(r), r.name, r.detail.replace("\n", " | "))
+        if r.skipped:
+            skipped += 1
+        elif not r.passed:
             failed += 1
     log.info("-" * 100)
-    log.info("Resumen: %d PASS, %d FAIL (total %d)", len(results) - failed, failed, len(results))
+    log.info(
+        "Resumen: %d PASS, %d FAIL, %d SKIP (total %d)",
+        len(results) - failed - skipped,
+        failed,
+        skipped,
+        len(results),
+    )
     return 0 if failed == 0 else 1
 
 

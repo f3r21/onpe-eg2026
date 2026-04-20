@@ -98,8 +98,14 @@ class OnpeClient:
         return self
 
     async def __aexit__(self, *_exc: object) -> None:
-        if self._client is not None:
+        if self._client is None:
+            return
+        try:
             await self._client.aclose()
+        finally:
+            # Limpia la referencia aunque aclose falle (p.ej. error de flush
+            # HTTP/2 en shutdown degradado); evita que un segundo __aenter__
+            # reuse un cliente medio-cerrado.
             self._client = None
 
     async def _throttle(self) -> None:

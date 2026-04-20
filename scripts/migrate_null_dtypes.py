@@ -1,8 +1,8 @@
 """Migración one-shot: chunks Parquet con columnas dtype=null -> cast a String.
 
-Los chunks escritos antes del fix de `_coerce_null_columns` (task #28) pueden
-tener columnas persistidas con Parquet `null` logical type (p.ej. `idMesa` en
-el run nocturno del 2026-04-17). El reader de `build_curated.py` ya lo absorbe
+Los chunks escritos antes del fix de `_coerce_null_columns` pueden tener
+columnas persistidas con Parquet `null` logical type (p.ej. `idMesa` en un
+run historico). El reader de `build_curated.py` ya lo absorbe
 via `how=diagonal_relaxed`, pero una migración deja el facts layer homogéneo y
 evita el overhead por-archivo en reads futuros.
 

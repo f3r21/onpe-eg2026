@@ -26,7 +26,7 @@ Ingesta de resultados de las **Elecciones Generales Perú 2026** (EG2026, 2026-0
 | `curated/actas_votos.parquet` | 18,612,565 | **97.87% actas** (453,965 / 463,830) | 9,865 sin votos: 240 mesa-no-instalada + 9,625 Pendientes |
 | `curated/actas_linea_tiempo.parquet` | **1,270,390** | **274% row ratio** (1M+ eventos × 463k actas) | Cerrado gap (eran 439) |
 | `curated/actas_archivos.parquet` | **811,984** | **~95% actas** (metadata 2 PDFs/acta) | Cerrado gap (eran 60) |
-| `curated/actas_anomalia_240_investigacion.parquet` | 240 | — | 100% mesa_no_instalada (task #58 CERRADA) |
+| `curated/actas_anomalia_240_investigacion.parquet` | 240 | — | 100% mesa_no_instalada (anomalia cerrada) |
 | `facts/totales,mapa_calor,...` (aggregates) | N snapshots | — | Series temporales cada 15min (shim aggregate_loop) |
 
 **DQ al 2026-04-19 08:11:** **14/14 PASS** (5 N1 + 5 N2 + 4 N3). Identidades contables EXACTAS en 390,827 actas C con detalle. Drifts todos en µ% (≤0.001% presidencial, ≤2.16% Diputados por DE).
@@ -60,10 +60,10 @@ scripts/
   dq_check.py                     # DQ Nivel 1 + 2 + 3 (--nivel 1|2|3|0)
   smoke.py                        # end-to-end validation — golden path del API
   dashboard.py                    # HTML estático salud del pipeline → data/dashboard/index.html
-  investigate_anomaly_240.py      # diagnóstico task #58 — re-fetch + clasificar 240 C sin detalle
+  investigate_anomaly_240.py      # diagnostico re-fetch + clasificar 240 C sin detalle
   download_geojsons.py            # descarga peruLow.json
   download_pdfs.py                # descarga masiva PDFs (blocked por DevTools endpoint)
-  migrate_null_dtypes.py          # one-shot: castear columnas Parquet null a String (post task #28)
+  migrate_null_dtypes.py          # one-shot: castear columnas Parquet null a String
   validate_ambitos.py             # sanity check de la segregación Perú/Exterior en dim/
 
 tests/                            # pytest (62 tests, cov: schemas 100% / locks 90% / client 83%)
@@ -120,8 +120,12 @@ uv run python scripts/snapshot_aggregates.py
 # Curated + DQ después de cualquier fetch
 uv run python scripts/build_curated.py
 uv run python scripts/build_curated.py --dry-run
-uv run python scripts/dq_check.py                  # ambos niveles (default)
+uv run python scripts/dq_check.py                  # todos los niveles (default)
 uv run python scripts/dq_check.py --nivel 1        # solo integridad interna
+
+# Analytics + mapa interactivo (requiere curated + dim/geojson)
+uv run python scripts/analytics_report.py          # top partidos, participacion, ganadores DE
+uv run python scripts/build_choropleth.py          # mapa Leaflet 3 niveles pais->provincia->distrito
 
 # Para runs largos en background en el Mac
 nohup caffeinate -dims uv run python scripts/snapshot_actas.py \
@@ -179,7 +183,7 @@ Para totales "oficiales" filtrar `codigoEstadoActa == "C"`. Para universo máxim
 - Float64 real: `porcentajeParticipacionCiudadana` (cabecera).
 - Boolean: `es_especial` (derivado por `normalize_acta`).
 
-Antes de añadir una columna al `_NUMERIC_SCHEMAS` de `src/onpe/actas.py`, verificar empíricamente el tipo con un fetch — si es categórica aunque sea numérica, dejarla como String (default). El bug #42 se disparó por un smoke con totalVotosEmitidos all-null que castó a String y contagió el curated entero.
+Antes de añadir una columna al `_NUMERIC_SCHEMAS` de `src/onpe/actas.py`, verificar empíricamente el tipo con un fetch — si es categórica aunque sea numérica, dejarla como String (default). Se disparó un bug pasado en el que un smoke con totalVotosEmitidos all-null castó a String y contagió el curated entero.
 
 **204 No Content** en combinaciones no aplicables (p. ej. `participantes_nacional` para id=13 Diputados). El cliente ya lo trata como `{"data": None}`.
 
@@ -231,7 +235,7 @@ Estado al 2026-04-20:
 - A4 re-snapshot FULL: 8h 53m 50s, 463,830 actas ok=100%, linea_tiempo y archivos poblados al ~100%
 - B1 enrich_curated.py + integración en build_curated. Mapeo ONPE-depto → DE: Callao=7, Lima split 15/16 (por provincia 1401), offsets +1/+2 validados
 - B2 DQ Nivel 3 (4 checks, 14/14 PASS post-A4)
-- B3 investigate_anomaly_240 ejecutado: **240/240 = mesa_no_instalada** (task #58 CERRADA)
+- B3 investigate_anomaly_240 ejecutado: **240/240 = mesa_no_instalada** (anomalia cerrada)
 - C1 tests pytest (77 passing, cov schemas=100%, geojson=97%, locks=90%, client=83%, pdfs=65%)
 - C2 schemas.py + validate_chunk en _flush_chunk (fail-fast drift) + jitter ±10% en _throttle
 - D2 GeoJSONs peruLow.json (26 deptos + Callao + Lago Titicaca). Provs no expuestas en SPA
