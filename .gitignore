@@ -35,3 +35,6 @@ nohup.out
 # LaunchAgents renderizados desde .template por install.sh (no commit)
 ops/launchd/com.onpe.*.plist
 !ops/launchd/com.onpe.*.plist.template
+
+# Backups locales de git (git-filter-repo, manual git clones)
+.git.backup-*/
