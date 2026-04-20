@@ -55,17 +55,13 @@ def resumen_ejecutivo(cab: pl.DataFrame) -> str:
     lines.append(f"Elecciones: {cab['idEleccion'].n_unique()}")
     lines.append("")
     lines.append("Distribución por estado:")
-    by_estado = (
-        cab.group_by("codigoEstadoActa").agg(pl.len().alias("n")).sort("n", descending=True)
-    )
+    by_estado = cab.group_by("codigoEstadoActa").agg(pl.len().alias("n")).sort("n", descending=True)
     for row in by_estado.iter_rows(named=True):
         pct = row["n"] / cab.height * 100
         lines.append(f"  {row['codigoEstadoActa']}: {row['n']:,} ({pct:.1f}%)")
     lines.append("")
     lines.append("Distribución por elección:")
-    by_el = (
-        cab.group_by("idEleccion").agg(pl.len().alias("n")).sort("idEleccion")
-    )
+    by_el = cab.group_by("idEleccion").agg(pl.len().alias("n")).sort("idEleccion")
     for row in by_el.iter_rows(named=True):
         name = ELECCIONES.get(row["idEleccion"], "?")
         lines.append(f"  id={row['idEleccion']} {name}: {row['n']:,}")
@@ -84,9 +80,7 @@ def top_partidos(vot: pl.DataFrame, cab: pl.DataFrame, outdir: Path) -> str:
         )
     )
     # Total votos por elección
-    total_por_el = df.group_by("idEleccion").agg(
-        pl.col("total_votos").sum().alias("sum_eleccion")
-    )
+    total_por_el = df.group_by("idEleccion").agg(pl.col("total_votos").sum().alias("sum_eleccion"))
     df = df.join(total_por_el, on="idEleccion").with_columns(
         (pl.col("total_votos") / pl.col("sum_eleccion") * 100).alias("pct")
     )
@@ -96,11 +90,7 @@ def top_partidos(vot: pl.DataFrame, cab: pl.DataFrame, outdir: Path) -> str:
     # Top 10 por elección
     lines = ["=" * 70, "TOP 10 PARTIDOS POR ELECCIÓN (C + E)", "=" * 70, ""]
     for el_id, el_name in ELECCIONES.items():
-        top = (
-            df.filter(pl.col("idEleccion") == el_id)
-            .sort("total_votos", descending=True)
-            .head(10)
-        )
+        top = df.filter(pl.col("idEleccion") == el_id).sort("total_votos", descending=True).head(10)
         if top.is_empty():
             continue
         lines.append(f"--- id={el_id} {el_name} ---")
@@ -143,17 +133,14 @@ def partidos_por_de(vot: pl.DataFrame, cab: pl.DataFrame, outdir: Path) -> str:
     if "idDistritoElectoral" not in cab.columns:
         return "(skipped: curated no enriquecido con idDistritoElectoral)\n"
 
-    vot_de = vot.filter(
-        (~pl.col("es_especial")) & (pl.col("idEleccion") == 13)
-    ).join(
+    vot_de = vot.filter((~pl.col("es_especial")) & (pl.col("idEleccion") == 13)).join(
         cab.filter(pl.col("idEleccion") == 13).select("idActa", "idDistritoElectoral"),
         on="idActa",
         how="inner",
     )
-    por_de_partido = (
-        vot_de.group_by(["idDistritoElectoral", "nagrupacionPolitica", "descripcion"])
-        .agg(pl.col("nvotos").sum().alias("total_votos"))
-    )
+    por_de_partido = vot_de.group_by(
+        ["idDistritoElectoral", "nagrupacionPolitica", "descripcion"]
+    ).agg(pl.col("nvotos").sum().alias("total_votos"))
     # Ganador por DE
     ganadores = por_de_partido.sort(
         ["idDistritoElectoral", "total_votos"], descending=[False, True]
@@ -228,15 +215,15 @@ def comparativa_historico(cab: pl.DataFrame, outdir: Path) -> str:
     # Primero necesitamos saber el mapeo RENIEC ubigeo → ONPE ubigeo
     # Los ubigeos en hist son los RENIEC (INEI-like). Los 2 primeros chars = depto.
     eg21 = (
-        hist.with_columns(pl.col("ubigeo").cast(pl.String).str.zfill(6).str.slice(0, 2).alias("depto_code"))
+        hist.with_columns(
+            pl.col("ubigeo").cast(pl.String).str.zfill(6).str.slice(0, 2).alias("depto_code")
+        )
         .group_by("depto_code")
         .agg(
             pl.col("ELECTORES_HABIL").sum().alias("hab_21"),
             pl.col("TOT_CIUDADANOS_VOTARON").sum().alias("votaron_21"),
         )
-        .with_columns(
-            (pl.col("votaron_21") / pl.col("hab_21") * 100).alias("pct_21")
-        )
+        .with_columns((pl.col("votaron_21") / pl.col("hab_21") * 100).alias("pct_21"))
     )
 
     # EG2026: de cab (Presidencial C)
@@ -248,19 +235,22 @@ def comparativa_historico(cab: pl.DataFrame, outdir: Path) -> str:
             pl.col("totalElectoresHabiles").sum().alias("hab_26"),
             pl.col("totalVotosEmitidos").sum().alias("votaron_26"),
         )
-        .with_columns(
-            (pl.col("votaron_26") / pl.col("hab_26") * 100).alias("pct_26")
-        )
+        .with_columns((pl.col("votaron_26") / pl.col("hab_26") * 100).alias("pct_26"))
     )
 
     # Nota: los depto codes ONPE y RENIEC son distintos (Lima ONPE=14, RENIEC=15).
     # La comparativa simple depto-por-depto no es directa sin mapeo.
     # Como proxy: juntamos by pct delta sin asumir mapping.
-    out = eg21.select("depto_code", "pct_21").rename({"depto_code": "depto_reniec"}).join(
-        eg26.select("depto_code_onpe", "pct_26"), how="cross"
-    ).with_columns((pl.col("pct_26") - pl.col("pct_21")).alias("delta_pct"))
+    out = (
+        eg21.select("depto_code", "pct_21")
+        .rename({"depto_code": "depto_reniec"})
+        .join(eg26.select("depto_code_onpe", "pct_26"), how="cross")
+        .with_columns((pl.col("pct_26") - pl.col("pct_21")).alias("delta_pct"))
+    )
 
-    out.write_parquet(outdir / "eg2021_vs_eg2026_participacion_pairwise.parquet", compression="zstd")
+    out.write_parquet(
+        outdir / "eg2021_vs_eg2026_participacion_pairwise.parquet", compression="zstd"
+    )
 
     lines = ["=" * 70, "PARTICIPACIÓN EG2026 vs EG2021 (por depto)", "=" * 70, ""]
     lines.append("NOTA: ubigeos RENIEC (EG2021) ≠ ubigeos ONPE (EG2026) — mapeo deferred.")
@@ -270,8 +260,12 @@ def comparativa_historico(cab: pl.DataFrame, outdir: Path) -> str:
     vot21_tot = float(eg21["votaron_21"].sum())
     hab26_tot = float(eg26["hab_26"].sum())
     vot26_tot = float(eg26["votaron_26"].sum())
-    lines.append(f"  EG2021: {hab21_tot:>12,.0f} hábiles, {vot21_tot:>12,.0f} votaron → {vot21_tot/max(hab21_tot,1)*100:.2f}%")
-    lines.append(f"  EG2026: {hab26_tot:>12,.0f} hábiles, {vot26_tot:>12,.0f} votaron → {vot26_tot/max(hab26_tot,1)*100:.2f}% (solo C, drift temporal posible)")
+    lines.append(
+        f"  EG2021: {hab21_tot:>12,.0f} hábiles, {vot21_tot:>12,.0f} votaron → {vot21_tot / max(hab21_tot, 1) * 100:.2f}%"
+    )
+    lines.append(
+        f"  EG2026: {hab26_tot:>12,.0f} hábiles, {vot26_tot:>12,.0f} votaron → {vot26_tot / max(hab26_tot, 1) * 100:.2f}% (solo C, drift temporal posible)"
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -281,7 +275,9 @@ def main() -> None:
     parser.add_argument("--outdir", type=str, default=str(DATA_DIR / "analytics"))
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)

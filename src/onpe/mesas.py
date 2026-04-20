@@ -86,9 +86,7 @@ async def crawl_mesas(
     dist_path = DIM_DIR / "distritos.parquet"
     loc_path = DIM_DIR / "locales.parquet"
     if not dist_path.exists() or not loc_path.exists():
-        raise FileNotFoundError(
-            f"faltan dims en {DIM_DIR}. Correr scripts/crawl_dims.py antes."
-        )
+        raise FileNotFoundError(f"faltan dims en {DIM_DIR}. Correr scripts/crawl_dims.py antes.")
 
     df_dist = pl.read_parquet(dist_path)
     df_loc = pl.read_parquet(loc_path)
@@ -101,9 +99,7 @@ async def crawl_mesas(
 
     # Dim legacy sin idAmbitoGeografico: asumir Perú.
     if "idAmbitoGeografico" not in df_loc.columns:
-        df_loc = df_loc.with_columns(
-            pl.lit(AMBITO_PERU).alias("idAmbitoGeografico")
-        )
+        df_loc = df_loc.with_columns(pl.lit(AMBITO_PERU).alias("idAmbitoGeografico"))
 
     # Un local "gatillo" por distrito: el primero en orden estable.
     triggers = (

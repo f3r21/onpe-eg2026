@@ -114,11 +114,7 @@ def load_target_archivo_ids(
             "(task A4). Esperar a que termine antes de descargar PDFs."
         )
 
-    c_actas = (
-        pl.scan_parquet(cab_path)
-        .filter(pl.col("codigoEstadoActa") == "C")
-        .select("idActa")
-    )
+    c_actas = pl.scan_parquet(cab_path).filter(pl.col("codigoEstadoActa") == "C").select("idActa")
     lf = pl.scan_parquet(arch_path)
     if tipos:
         lf = lf.filter(pl.col("tipo").is_in(list(tipos)))
@@ -148,7 +144,9 @@ async def _run(
         ck = PdfCheckpoint.load(resume_run_ts_ms)
         log.info(
             "reanudando run_ts_ms=%d, completados=%d/%d",
-            ck.run_ts_ms, len(ck.completed), ck.total_expected,
+            ck.run_ts_ms,
+            len(ck.completed),
+            ck.total_expected,
         )
     else:
         now_ms = utc_now_ms()
@@ -167,6 +165,7 @@ async def _run(
     gcs_bucket = None
     if gcs_bucket_name:
         from google.cloud import storage
+
         gcs_client = storage.Client()
         # Strip gs:// prefix si viene
         name = gcs_bucket_name.removeprefix("gs://").rstrip("/")
@@ -179,36 +178,41 @@ async def _run(
     cfg_onpe = ClientConfig(max_concurrent=concurrency, rate_per_second=rps)
     s3_limits = httpx.Limits(max_connections=concurrency, max_keepalive_connections=concurrency)
 
-    async with OnpeClient(cfg_onpe) as onpe:
-        async with httpx.AsyncClient(timeout=60.0, limits=s3_limits) as s3:
-            sem = asyncio.Semaphore(concurrency)
+    async with (
+        OnpeClient(cfg_onpe) as onpe,
+        httpx.AsyncClient(timeout=60.0, limits=s3_limits) as s3,
+    ):
+        sem = asyncio.Semaphore(concurrency)
 
-            async def one(aid: str) -> DownloadResult:
-                async with sem:
-                    if gcs_bucket is not None:
-                        return await download_pdf_to_gcs(onpe, s3, gcs_bucket, aid)
-                    return await download_pdf(onpe, s3, aid, PDFS_DIR)
+        async def one(aid: str) -> DownloadResult:
+            async with sem:
+                if gcs_bucket is not None:
+                    return await download_pdf_to_gcs(onpe, s3, gcs_bucket, aid)
+                return await download_pdf(onpe, s3, aid, PDFS_DIR)
 
-            stats = {"downloaded": 0, "skipped_existing": 0, "failed": 0}
-            t0 = time.perf_counter()
-            for i in range(0, len(pending), BATCH):
-                batch = pending[i : i + BATCH]
-                results = await asyncio.gather(*(one(aid) for aid in batch))
-                for r in results:
-                    stats[r.status] = stats.get(r.status, 0) + 1
-                    if r.status == "failed":
-                        ck.failed.append({"archivo_id": r.archivo_id, "error": r.error})
-                    else:
-                        ck.completed.add(r.archivo_id)
-                ck.save()
-                elapsed = time.perf_counter() - t0
-                rate = (i + len(batch)) / max(elapsed, 1e-6)
-                log.info(
-                    "progreso %d/%d (ok=%d skip=%d fail=%d) @ %.1f/s",
-                    len(ck.completed), ck.total_expected,
-                    stats["downloaded"], stats["skipped_existing"], stats["failed"],
-                    rate,
-                )
+        stats = {"downloaded": 0, "skipped_existing": 0, "failed": 0}
+        t0 = time.perf_counter()
+        for i in range(0, len(pending), BATCH):
+            batch = pending[i : i + BATCH]
+            results = await asyncio.gather(*(one(aid) for aid in batch))
+            for r in results:
+                stats[r.status] = stats.get(r.status, 0) + 1
+                if r.status == "failed":
+                    ck.failed.append({"archivo_id": r.archivo_id, "error": r.error})
+                else:
+                    ck.completed.add(r.archivo_id)
+            ck.save()
+            elapsed = time.perf_counter() - t0
+            rate = (i + len(batch)) / max(elapsed, 1e-6)
+            log.info(
+                "progreso %d/%d (ok=%d skip=%d fail=%d) @ %.1f/s",
+                len(ck.completed),
+                ck.total_expected,
+                stats["downloaded"],
+                stats["skipped_existing"],
+                stats["failed"],
+                rate,
+            )
 
     return ck
 
@@ -246,13 +250,17 @@ def main() -> None:
     ids = load_target_archivo_ids(limit=args.limit, tipos=tipos)
     log.info(
         "universo de PDFs: %d archivoIds (tipos=%s)",
-        len(ids), tipos or "todos",
+        len(ids),
+        tipos or "todos",
     )
 
     ck = asyncio.run(_run(ids, args.rps, args.concurrency, args.resume, args.gcs_bucket))
     log.info(
         "run_ts_ms=%d done: completados=%d/%d (failed=%d)",
-        ck.run_ts_ms, len(ck.completed), ck.total_expected, len(ck.failed),
+        ck.run_ts_ms,
+        len(ck.completed),
+        ck.total_expected,
+        len(ck.failed),
     )
 
 

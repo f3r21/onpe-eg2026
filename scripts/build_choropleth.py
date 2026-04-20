@@ -67,9 +67,7 @@ def ganadores_por_nivel(
     else:
         raise ValueError(f"level inválido: {level}")
 
-    cab_peru = cab.filter(
-        (pl.col("idEleccion") == 10) & (pl.col("idAmbitoGeografico") == 1)
-    )
+    cab_peru = cab.filter((pl.col("idEleccion") == 10) & (pl.col("idAmbitoGeografico") == 1))
     votos = (
         vot.filter((~pl.col("es_especial")) & (pl.col("idEleccion") == 10))
         .join(cab_peru.select("idActa", "ubigeoDistrito"), on="idActa", how="inner")
@@ -156,9 +154,7 @@ def enrich_feature(feat: dict, feat_id: str, ganadores: dict, participacion: dic
     return {**feat, "properties": props}
 
 
-def build_provincias_by_depto(
-    ganadores_prov: dict, participacion_prov: dict
-) -> dict[str, dict]:
+def build_provincias_by_depto(ganadores_prov: dict, participacion_prov: dict) -> dict[str, dict]:
     """Devuelve {ubigeoDepartamento: FeatureCollection_provincias}."""
     by_depto: dict[str, dict] = {}
     depto_dir = GEOJSON_DIR / "departamentos"
@@ -182,9 +178,7 @@ def build_provincias_by_depto(
     return by_depto
 
 
-def build_distritos_by_provincia(
-    ganadores_dist: dict, participacion_dist: dict
-) -> dict[str, dict]:
+def build_distritos_by_provincia(ganadores_dist: dict, participacion_dist: dict) -> dict[str, dict]:
     """Devuelve {ubigeoProvincia: FeatureCollection_distritos}.
 
     Cada provincia geojson tiene features=distritos; el id del distrito viene
@@ -491,8 +485,7 @@ showNacional();
 </html>
 """
     return (
-        template
-        .replace("PERU_GEOJSON_PLACEHOLDER", peru_geojson)
+        template.replace("PERU_GEOJSON_PLACEHOLDER", peru_geojson)
         .replace("PROVINCIAS_PLACEHOLDER", provincias_json)
         .replace("DISTRITOS_PLACEHOLDER", distritos_json)
         .replace("PARTY_COLORS_PLACEHOLDER", party_colors_json)
@@ -506,7 +499,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--open", action="store_true")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     log.info("leyendo curated + geojsons...")
     cab = pl.read_parquet(CURATED_CAB)
@@ -543,6 +538,7 @@ def main() -> None:
     from datetime import datetime
 
     from onpe.storage import TZ_LIMA
+
     built_at = datetime.now(UTC).astimezone(TZ_LIMA).isoformat(timespec="seconds")
     meta = {"built_at": built_at, "n_actas": cab.height}
 
@@ -555,6 +551,7 @@ def main() -> None:
 
     if args.open:
         import subprocess
+
         subprocess.run(["open", str(out)], check=False)
 
 

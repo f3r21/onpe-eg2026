@@ -25,7 +25,7 @@ import polars as pl
 from onpe.actas import SnapshotConfig, snapshot_actas
 from onpe.client import ClientConfig, OnpeClient
 from onpe.endpoints import AMBITOS_TODOS
-from onpe.locks import LockHeld, PipelineLock
+from onpe.locks import LockHeldError, PipelineLock
 from onpe.storage import DIM_DIR
 
 
@@ -66,9 +66,7 @@ async def main() -> None:
             ambitos,
         )
 
-    cfg_http = ClientConfig(
-        max_concurrent=args.concurrency, rate_per_second=args.rps
-    )
+    cfg_http = ClientConfig(max_concurrent=args.concurrency, rate_per_second=args.rps)
     cfg_snap = SnapshotConfig()
     t0 = time.perf_counter()
     # Lock advisory: previene colisión de rate-limit con daily_refresh corriendo
@@ -79,7 +77,7 @@ async def main() -> None:
                 ck, stats = await snapshot_actas(
                     c, df_mesas, cfg_snap, resume_run_ts_ms=args.resume, limit=args.limit
                 )
-    except LockHeld as e:
+    except LockHeldError as e:
         log.error("abortando: %s", e)
         raise SystemExit(1) from e
     dt = time.perf_counter() - t0

@@ -43,7 +43,17 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "N", "RUF"]
-ignore = ["E501"]
+ignore = [
+    "E501",    # line too long (gestionado por formatter)
+    "RUF001",  # ambiguous unicode en strings (×, guiones es válido es-419)
+    "RUF002",  # ambiguous unicode en docstrings
+    "RUF003",  # ambiguous unicode en comments
+    "N815",    # camelCase en variables (nombres de API ONPE son camelCase)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests usan identificadores mimetizando el API ONPE (idActa, archivoId).
+"tests/*" = ["N802", "N803"]
 
 [tool.ruff.format]
 quote-style = "double"

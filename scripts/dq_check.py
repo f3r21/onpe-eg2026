@@ -76,13 +76,17 @@ def nivel1_cardinalidad_detalle() -> CheckResult:
 
 
 def nivel1_identidades_contables() -> CheckResult:
-    agg = pl.scan_parquet(VOT).group_by(["idActa", "idEleccion"]).agg(
-        pl.col("nvotos").sum().alias("sum_tot"),
-        pl.when(~pl.col("es_especial"))
-        .then(pl.col("nvotos"))
-        .otherwise(0)
-        .sum()
-        .alias("sum_val"),
+    agg = (
+        pl.scan_parquet(VOT)
+        .group_by(["idActa", "idEleccion"])
+        .agg(
+            pl.col("nvotos").sum().alias("sum_tot"),
+            pl.when(~pl.col("es_especial"))
+            .then(pl.col("nvotos"))
+            .otherwise(0)
+            .sum()
+            .alias("sum_val"),
+        )
     )
     cab = (
         pl.scan_parquet(CAB)
@@ -122,13 +126,11 @@ def nivel1_rangos() -> CheckResult:
             (pl.col("totalVotosEmitidos") > pl.col("totalElectoresHabiles"))
             .sum()
             .alias("emit_gt_hab"),
-            (pl.col("totalVotosValidos") > pl.col("totalVotosEmitidos"))
-            .sum()
-            .alias("val_gt_emit"),
+            (pl.col("totalVotosValidos") > pl.col("totalVotosEmitidos")).sum().alias("val_gt_emit"),
         )
         .collect()
     )
-    ok = (df.row(0) == (0, 0, 0, 0, 0))
+    ok = df.row(0) == (0, 0, 0, 0, 0)
     return CheckResult("rangos y signos", ok, str(df))
 
 
@@ -143,11 +145,7 @@ def nivel1_padron_coherente() -> CheckResult:
         )
         .collect()
     )
-    ok = (
-        (df["elec"] == 5).all()
-        and (df["hab"] == 1).all()
-        and (df["dist"] == 1).all()
-    )
+    ok = (df["elec"] == 5).all() and (df["hab"] == 1).all() and (df["dist"] == 1).all()
     return CheckResult("padrón coherente por mesa", ok, f"mesas={len(df)}")
 
 
@@ -197,12 +195,8 @@ def nivel2_universo_mesas() -> CheckResult:
 
 def nivel2_actas_por_eleccion() -> CheckResult:
     """Verifica que oficial_total = cur_total; las deltas C/E/P son drift temporal."""
-    ofi = _latest_snapshot("totales").select(
-        ["idEleccion", pl.col("totalActas").alias("ofi_tot")]
-    )
-    cur = (
-        pl.scan_parquet(CAB).group_by("idEleccion").agg(pl.len().alias("cur_tot")).collect()
-    )
+    ofi = _latest_snapshot("totales").select(["idEleccion", pl.col("totalActas").alias("ofi_tot")])
+    cur = pl.scan_parquet(CAB).group_by("idEleccion").agg(pl.len().alias("cur_tot")).collect()
     j = ofi.join(cur, on="idEleccion")
     ok = (j["ofi_tot"] == j["cur_tot"]).all()
     return CheckResult("totalActas por elección", ok, str(j))
@@ -256,7 +250,9 @@ def nivel2_regiones_id10() -> CheckResult:
     cur = (
         pl.scan_parquet(CAB)
         .filter((pl.col("idEleccion") == 10) & (pl.col("codigoEstadoActa") == "C"))
-        .with_columns((pl.col("ubigeoDistrito").str.slice(0, 2).cast(pl.Int64) * 10000).alias("ub01"))
+        .with_columns(
+            (pl.col("ubigeoDistrito").str.slice(0, 2).cast(pl.Int64) * 10000).alias("ub01")
+        )
         .group_by("ub01")
         .agg(pl.len().alias("cur_C"))
         .collect()
@@ -414,7 +410,10 @@ def nivel3_partidos_diputados_por_de() -> CheckResult:
             pl.col("ofi_val").sum().alias("total"),
         )
         .with_columns(
-            (pl.col("abs_delta") / pl.when(pl.col("total") > 0).then(pl.col("total")).otherwise(1)).alias("ratio")
+            (
+                pl.col("abs_delta")
+                / pl.when(pl.col("total") > 0).then(pl.col("total")).otherwise(1)
+            ).alias("ratio")
         )
     )
     max_drift_pct = float(drift_by_de["ratio"].max() or 0.0) * 100
@@ -435,9 +434,7 @@ def nivel3_exterior_universo_senadores_nacional() -> CheckResult:
     """
     df = (
         pl.scan_parquet(CAB)
-        .filter(
-            (pl.col("idDistritoElectoral") == 27) & (pl.col("idEleccion") == 15)
-        )
+        .filter((pl.col("idDistritoElectoral") == 27) & (pl.col("idEleccion") == 15))
         .select(pl.len().alias("n"))
         .collect()
     )
@@ -460,18 +457,15 @@ def nivel3_coherencia_ambito_vs_de() -> CheckResult:
     df = (
         pl.scan_parquet(CAB)
         .select(
-            (
-                (pl.col("idDistritoElectoral") == 27)
-                & (pl.col("idAmbitoGeografico") != 2)
-            ).sum().alias("de27_no_ext"),
-            (
-                (pl.col("idAmbitoGeografico") == 2)
-                & (pl.col("idDistritoElectoral") != 27)
-            ).sum().alias("ext_no_de27"),
-            (
-                (pl.col("idDistritoElectoral").is_null())
-                | (pl.col("idAmbitoGeografico").is_null())
-            ).sum().alias("nulls"),
+            ((pl.col("idDistritoElectoral") == 27) & (pl.col("idAmbitoGeografico") != 2))
+            .sum()
+            .alias("de27_no_ext"),
+            ((pl.col("idAmbitoGeografico") == 2) & (pl.col("idDistritoElectoral") != 27))
+            .sum()
+            .alias("ext_no_de27"),
+            ((pl.col("idDistritoElectoral").is_null()) | (pl.col("idAmbitoGeografico").is_null()))
+            .sum()
+            .alias("nulls"),
         )
         .collect()
     )
@@ -505,9 +499,7 @@ def nivel4_datasource_disponible() -> CheckResult:
     Si no existe (ONPE aún no publicó en datosabiertos, ~2-4 sem post-JNE),
     todos los checks Nivel 4 se skippean con mensaje informativo.
     """
-    oficiales = sorted(
-        (CAB.parent).glob("datosabiertos_eg2026_*.parquet")
-    )
+    oficiales = sorted((CAB.parent).glob("datosabiertos_eg2026_*.parquet"))
     ok = len(oficiales) > 0
     detail = (
         f"datasets oficiales: {[p.name for p in oficiales]}"
@@ -525,9 +517,7 @@ def nivel4_reconciliacion_votos_por_partido() -> CheckResult:
     espera columnas tipo: UBIGEO, PARTIDO/CANDIDATO_ID, VOTOS_PARTIDO.
     El mapping exacto se confirma post-publicación.
     """
-    oficiales = sorted(
-        (CAB.parent).glob("datosabiertos_eg2026_*.parquet")
-    )
+    oficiales = sorted((CAB.parent).glob("datosabiertos_eg2026_*.parquet"))
     if not oficiales:
         return CheckResult(
             "reconciliación votos por partido × distrito × elección",
@@ -558,8 +548,13 @@ def run_nivel4() -> list[CheckResult]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--nivel", type=int, choices=[1, 2, 3, 4, 0], default=0,
-                        help="1 | 2 | 3 | 4 = solo un nivel; 0 = todos los niveles disponibles (default)")
+    parser.add_argument(
+        "--nivel",
+        type=int,
+        choices=[1, 2, 3, 4, 0],
+        default=0,
+        help="1 | 2 | 3 | 4 = solo un nivel; 0 = todos los niveles disponibles (default)",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 

@@ -92,9 +92,7 @@ def compute_distrito_electoral(
     return None
 
 
-def enrich_cabecera(
-    df_cab: pl.DataFrame, df_mesas: pl.DataFrame
-) -> pl.DataFrame:
+def enrich_cabecera(df_cab: pl.DataFrame, df_mesas: pl.DataFrame) -> pl.DataFrame:
     """Join curated cabecera con dim/mesas + cálculo de idDistritoElectoral.
 
     Idempotente: si las columnas ENRICH_COLS ya existen en df_cab, se droppean
@@ -126,16 +124,13 @@ def enrich_cabecera(
     after = joined.height
     if after != before:
         raise ValueError(
-            f"join introdujo duplicación: {before} → {after}. "
-            "Investigar keys en dim/mesas."
+            f"join introdujo duplicación: {before} → {after}. Investigar keys en dim/mesas."
         )
 
     # Derivar idDistritoElectoral fila-a-fila. Polars no tiene un when/then
     # flexible para la lógica Lima split, así que usamos map_rows.
     joined = joined.with_columns(
-        pl.struct(
-            "ubigeoDepartamento", "ubigeoProvincia", "idAmbitoGeografico"
-        )
+        pl.struct("ubigeoDepartamento", "ubigeoProvincia", "idAmbitoGeografico")
         .map_elements(
             lambda s: compute_distrito_electoral(
                 s["ubigeoDepartamento"], s["ubigeoProvincia"], s["idAmbitoGeografico"]
@@ -154,19 +149,21 @@ def _validate_integrity(df: pl.DataFrame) -> None:
     nulls_de = df.select(pl.col("idDistritoElectoral").is_null().sum()).item()
     log.info(
         "cardinalidades: n=%d, idAmbitoGeografico nulls=%d, idDistritoElectoral nulls=%d",
-        df.height, nulls_ambito, nulls_de,
+        df.height,
+        nulls_ambito,
+        nulls_de,
     )
     # Distribución de DE
     dist_de = (
-        df.group_by("idDistritoElectoral")
-        .agg(pl.len().alias("n"))
-        .sort("idDistritoElectoral")
+        df.group_by("idDistritoElectoral").agg(pl.len().alias("n")).sort("idDistritoElectoral")
     )
     log.info("distribución idDistritoElectoral:\n%s", dist_de)
     if nulls_ambito > 0 or nulls_de > 0:
         log.warning(
             "HAY %d null en idAmbitoGeografico y %d null en idDistritoElectoral. "
-            "Revisar mapeo de mesas.", nulls_ambito, nulls_de,
+            "Revisar mapeo de mesas.",
+            nulls_ambito,
+            nulls_de,
         )
 
 

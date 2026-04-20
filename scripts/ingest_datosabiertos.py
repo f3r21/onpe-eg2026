@@ -91,7 +91,10 @@ def normalize_to_parquet(csv_path: Path, dst_parquet: Path) -> int:
     df.write_parquet(dst_parquet, compression="zstd")
     log.info(
         "%s → %s (%d filas, %d cols)",
-        csv_path.name, dst_parquet.name, df.height, len(df.columns),
+        csv_path.name,
+        dst_parquet.name,
+        df.height,
+        len(df.columns),
     )
     return df.height
 
@@ -99,16 +102,21 @@ def normalize_to_parquet(csv_path: Path, dst_parquet: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--dataset-url", type=str, default=None,
+        "--dataset-url",
+        type=str,
+        default=None,
         help="URL del dataset ONPE. Si no se pasa, lee el flag de monitor.",
     )
     parser.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="re-ingesta aunque ya exista parquet.",
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     # Resolver URL del dataset
     dataset_url = args.dataset_url

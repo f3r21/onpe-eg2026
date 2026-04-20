@@ -42,6 +42,7 @@ def test_validate_detecta_columna_faltante(sample_cabecera_df: pl.DataFrame):
 def test_validate_columna_extra_solo_warning(sample_cabecera_df: pl.DataFrame, caplog):
     """Columna nueva no esperada: WARNING, no error."""
     import logging
+
     caplog.set_level(logging.WARNING, logger="onpe.schemas")
     df = sample_cabecera_df.with_columns(pl.lit("nuevo").alias("campoNuevoONPE"))
     violations = validate_chunk(df, "actas_cabecera", strict=True)
@@ -77,6 +78,7 @@ def test_validate_tabla_desconocida_raises_keyerror():
 def test_validate_cuatro_tablas_del_curated_pasan():
     """Smoke: el curated actual debe validar sin drift (escenario golden-path)."""
     from pathlib import Path
+
     curated = Path("data/curated")
     for table in ("actas_cabecera", "actas_votos", "actas_linea_tiempo", "actas_archivos"):
         path = curated / f"{table}.parquet"

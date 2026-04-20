@@ -363,9 +363,7 @@ def _coerce_null_columns(
     null_cols = [c for c, dt in df.schema.items() if dt == pl.Null]
     if not null_cols:
         return df
-    casts = [
-        pl.col(c).cast(numeric_schema.get(c, pl.String)) for c in null_cols
-    ]
+    casts = [pl.col(c).cast(numeric_schema.get(c, pl.String)) for c in null_cols]
     return df.with_columns(casts)
 
 
@@ -407,7 +405,11 @@ def _flush_chunk(
                 "Abortando flush para evitar contaminar facts. "
                 "Actualizar SCHEMAS[%s] en src/onpe/schemas.py tras investigar. "
                 "Detalles: %s",
-                chunk_idx, name, len(e.violations), name, e.violations[:5],
+                chunk_idx,
+                name,
+                len(e.violations),
+                name,
+                e.violations[:5],
             )
             raise
         df.write_parquet(_chunk_path(name, run_ts_ms, chunk_idx), compression="zstd")
@@ -438,9 +440,7 @@ async def _fetch_one(
         data = await acta_detalle(c, acta_id)
     except OnpeError as e:
         return acta_id, None, [], [], [], str(e)
-    cab, votos, linea, archivos = normalize_acta(
-        data, acta_id, id_mesa, ubigeo, snapshot_ts_ms
-    )
+    cab, votos, linea, archivos = normalize_acta(data, acta_id, id_mesa, ubigeo, snapshot_ts_ms)
     return acta_id, cab, votos, linea, archivos, None
 
 

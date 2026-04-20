@@ -31,6 +31,7 @@ def _make_client(handler) -> OnpeClient:
 @pytest.mark.asyncio
 async def test_get_json_happy_path(monkeypatch: pytest.MonkeyPatch):
     """Respuesta JSON 200 se parsea como dict."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": {"ok": True}})
 
@@ -47,6 +48,7 @@ async def test_get_json_happy_path(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.asyncio
 async def test_get_json_204_devuelve_data_none():
     """204 No Content se normaliza a {'data': None} — contrato del cliente."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(204)
 
@@ -63,6 +65,7 @@ async def test_get_json_204_devuelve_data_none():
 @pytest.mark.asyncio
 async def test_get_json_html_fallback_cloudfront_raises():
     """Content-Type text/html → CloudFront fallback → OnpeError con mensaje claro."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200, headers={"content-type": "text/html"}, content=b"<html>...</html>"
@@ -84,6 +87,7 @@ async def test_get_json_html_fallback_cloudfront_raises():
 @pytest.mark.asyncio
 async def test_get_json_429_dispara_transient_error():
     """429 Too Many Requests → OnpeTransientError (gatilla retry exponencial)."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, text="rate limited")
 
@@ -101,6 +105,7 @@ async def test_get_json_429_dispara_transient_error():
 @pytest.mark.asyncio
 async def test_get_json_500_no_retryable():
     """500 Internal Server Error → OnpeError (no es transient, no retry)."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="server error")
 
@@ -118,6 +123,7 @@ async def test_get_json_500_no_retryable():
 @pytest.mark.asyncio
 async def test_get_json_respuesta_vacia_devuelve_data_none():
     """Content vacío (sin 204 explícito) también se normaliza a data=None."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b"", headers={"content-type": "application/json"})
 

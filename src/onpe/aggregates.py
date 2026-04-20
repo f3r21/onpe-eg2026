@@ -96,9 +96,7 @@ async def snapshot_aggregates(
     # El param de query es idDistritoElectoral → se mapea desde `codigo`.
     de_ids = [d["codigo"] for d in des]
     de_pairs = [(e, d) for e in elecciones for d in de_ids]
-    tot_de = await asyncio.gather(
-        *(totales_distrito_electoral(c, e, d) for e, d in de_pairs)
-    )
+    tot_de = await asyncio.gather(*(totales_distrito_electoral(c, e, d) for e, d in de_pairs))
     part_de = await asyncio.gather(
         *(participantes_distrito_electoral(c, e, d) for e, d in de_pairs)
     )
@@ -136,9 +134,7 @@ async def snapshot_aggregates(
     for (e, d), row in zip(de_pairs, tot_de, strict=True):
         if row is None:
             continue
-        tot_de_rows.extend(
-            _stamp(row, snapshot_ts_ms, {"idEleccion": e, "idDistritoElectoral": d})
-        )
+        tot_de_rows.extend(_stamp(row, snapshot_ts_ms, {"idEleccion": e, "idDistritoElectoral": d}))
     df_tot_de = pl.DataFrame(tot_de_rows)
 
     part_de_rows: list[dict[str, Any]] = []

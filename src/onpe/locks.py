@@ -10,18 +10,19 @@ no lo adquieran no son bloqueados a nivel OS. Suficiente para nuestros
 scripts propios.
 
 Uso:
-    from onpe.locks import PipelineLock, LockHeld
+    from onpe.locks import LockHeldError, PipelineLock
 
     try:
         with PipelineLock():
             ...  # sección crítica
-    except LockHeld as e:
+    except LockHeldError as e:
         log.error("lock ocupado por PID=%d desde %s", e.pid, e.started_iso)
         raise SystemExit(1)
 """
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import json
 import logging
@@ -37,7 +38,7 @@ log = logging.getLogger(__name__)
 DEFAULT_LOCK_PATH = DATA_DIR / "state" / ".pipeline_lock"
 
 
-class LockHeld(Exception):
+class LockHeldError(Exception):
     """El lock ya está ocupado por otro proceso."""
 
     def __init__(self, pid: int, started_iso: str, path: Path) -> None:
@@ -83,8 +84,8 @@ class PipelineLock:
             os.close(fd)
             holder = self._existing_holder()
             if holder is None:
-                raise LockHeld(pid=-1, started_iso="?", path=self.path) from None
-            raise LockHeld(pid=holder[0], started_iso=holder[1], path=self.path) from None
+                raise LockHeldError(pid=-1, started_iso="?", path=self.path) from None
+            raise LockHeldError(pid=holder[0], started_iso=holder[1], path=self.path) from None
 
         # Truncar + escribir metadata fresca.
         now_ms = utc_now_ms()
@@ -110,8 +111,6 @@ class PipelineLock:
         finally:
             os.close(self._fd)
             self._fd = None
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 self.path.unlink()
-            except FileNotFoundError:
-                pass
             log.info("pipeline_lock liberado")

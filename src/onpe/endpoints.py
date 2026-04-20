@@ -101,9 +101,7 @@ async def distritos(
 
 
 async def locales(c: OnpeClient, ubigeo_dist: str) -> list[dict[str, Any]]:
-    return (
-        await c.get_json("/ubigeos/locales", params={"idUbigeo": ubigeo_dist})
-    )["data"]
+    return (await c.get_json("/ubigeos/locales", params={"idUbigeo": ubigeo_dist}))["data"]
 
 
 # --- Totales y participantes ------------------------------------------------
@@ -134,9 +132,7 @@ async def totales_distrito_electoral(
     )["data"]
 
 
-async def participantes_nacional(
-    c: OnpeClient, id_eleccion: int
-) -> list[dict[str, Any]]:
+async def participantes_nacional(c: OnpeClient, id_eleccion: int) -> list[dict[str, Any]]:
     return (
         await c.get_json(
             "/resumen-general/participantes",
@@ -161,9 +157,7 @@ async def participantes_distrito_electoral(
     )["data"]
 
 
-async def resumen_elecciones(
-    c: OnpeClient, id_proceso: int
-) -> list[dict[str, Any]]:
+async def resumen_elecciones(c: OnpeClient, id_proceso: int) -> list[dict[str, Any]]:
     """Avance agregado por tipo de elección (una fila por cada uno de los 5 idEleccion)."""
     return (
         await c.get_json(
@@ -180,9 +174,7 @@ async def resumen_elecciones(
 # --- Mapa de calor (avance del conteo jerárquico) --------------------------
 
 
-async def mapa_calor_nacional(
-    c: OnpeClient, id_eleccion: int
-) -> list[dict[str, Any]]:
+async def mapa_calor_nacional(c: OnpeClient, id_eleccion: int) -> list[dict[str, Any]]:
     """Una fila por departamento."""
     return (
         await c.get_json(
@@ -239,9 +231,7 @@ async def mapa_calor_provincia(
 
 async def mesa_totales(c: OnpeClient) -> dict[str, Any]:
     """Conteo nacional de mesas instaladas / no instaladas / pendientes."""
-    return (
-        await c.get_json("/mesa/totales", params={"tipoFiltro": "eleccion"})
-    )["data"]
+    return (await c.get_json("/mesa/totales", params={"tipoFiltro": "eleccion"}))["data"]
 
 
 async def ultima_fecha(c: OnpeClient) -> dict[str, Any]:

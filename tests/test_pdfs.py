@@ -89,7 +89,11 @@ def test_fetch_signed_url_parse_respuesta_ok():
 
     mock = AsyncMock()
     mock.get_json = AsyncMock(
-        return_value={"success": True, "message": "", "data": "https://bucket.s3.amazonaws.com/x.pdf?X-Amz=1"}
+        return_value={
+            "success": True,
+            "message": "",
+            "data": "https://bucket.s3.amazonaws.com/x.pdf?X-Amz=1",
+        }
     )
 
     async def run():
@@ -129,9 +133,7 @@ def test_fetch_signed_url_data_invalido_raises():
     from onpe.pdfs import fetch_signed_url
 
     mock = AsyncMock()
-    mock.get_json = AsyncMock(
-        return_value={"success": True, "data": "not-a-url"}
-    )
+    mock.get_json = AsyncMock(return_value={"success": True, "data": "not-a-url"})
 
     async def run():
         with pytest.raises(OnpeError, match="URL firmada inválida"):

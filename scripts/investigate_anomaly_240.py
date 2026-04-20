@@ -47,9 +47,7 @@ def find_anomaly_240() -> pl.DataFrame:
     votos_path = DATA_DIR / "curated" / "actas_votos.parquet"
     if not votos_path.exists():
         raise SystemExit(f"falta {votos_path}. Correr build_curated antes.")
-    actas_con_votos = (
-        pl.scan_parquet(votos_path).select(pl.col("idActa").unique()).collect()
-    )
+    actas_con_votos = pl.scan_parquet(votos_path).select(pl.col("idActa").unique()).collect()
     return (
         cab.join(actas_con_votos.lazy(), on="idActa", how="anti")
         .select("idActa", "codigoMesa", "ubigeoDistrito", "idEleccion", "estadoActa")
@@ -71,9 +69,7 @@ class DiagnosticResult:
     descripcionSubEstadoActa: str | None
 
 
-async def diagnose_one(
-    c: OnpeClient, row: dict, snapshot_ts_ms: int
-) -> DiagnosticResult:
+async def diagnose_one(c: OnpeClient, row: dict, snapshot_ts_ms: int) -> DiagnosticResult:
     try:
         data = await acta_detalle(c, int(row["idActa"]))
     except OnpeError as e:
@@ -151,22 +147,16 @@ def main() -> None:
     parser.add_argument("--rps", type=float, default=3.0, help="rate limit suave")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     df = find_anomaly_240()
     log.info("anomalía #58 universo actual: %d actas C sin detalle en curated", df.height)
     if df.height > 0:
-        dist = (
-            df.group_by("idEleccion")
-            .agg(pl.len().alias("n"))
-            .sort("idEleccion")
-        )
+        dist = df.group_by("idEleccion").agg(pl.len().alias("n")).sort("idEleccion")
         log.info("distribución por idEleccion:\n%s", dist)
-        dist_est = (
-            df.group_by("estadoActa")
-            .agg(pl.len().alias("n"))
-            .sort("n", descending=True)
-        )
+        dist_est = df.group_by("estadoActa").agg(pl.len().alias("n")).sort("n", descending=True)
         log.info("distribución por estadoActa:\n%s", dist_est)
 
     if args.dry_run:
@@ -184,14 +174,17 @@ def main() -> None:
     total = sum(buckets.values())
     log.info("\n=== CONCLUSIÓN ===")
     if buckets.get("resolved", 0) > 0:
-        log.info("  %d actas se resolvieron (tienen detalle ahora) — próximo build_curated las integra",
-                 buckets["resolved"])
+        log.info(
+            "  %d actas se resolvieron (tienen detalle ahora) — próximo build_curated las integra",
+            buckets["resolved"],
+        )
     if buckets.get("mesa_no_instalada", 0) / max(total, 1) >= 0.9:
         log.info("  ≥90%% son mesa NO instalada (estadoActa=N) — anomalía explicada")
         log.info("  ACCIÓN: actualizar CLAUDE.md task #58 como closed con justificación")
     elif buckets.get("other", 0) > 0:
-        log.info("  %d actas en bucket 'other' — requiere investigación case-by-case",
-                 buckets["other"])
+        log.info(
+            "  %d actas en bucket 'other' — requiere investigación case-by-case", buckets["other"]
+        )
 
 
 if __name__ == "__main__":

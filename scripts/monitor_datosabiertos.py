@@ -62,7 +62,9 @@ def main() -> int:
     parser.add_argument("--max-pages", type=int, default=5, help="páginas a escanear")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     log.info("consultando catálogo ONPE en datosabiertos.gob.pe...")
     try:
@@ -98,9 +100,7 @@ def main() -> int:
         log.warning("  url: %s", eg2026.url)
         log.warning("  fecha: %s", eg2026.raw_date)
         # Flag file para downstream cron/scripts
-        EG2026_ALERT_FILE.write_text(
-            json.dumps(asdict(eg2026), ensure_ascii=False, indent=2)
-        )
+        EG2026_ALERT_FILE.write_text(json.dumps(asdict(eg2026), ensure_ascii=False, indent=2))
         log.warning("flag escrito: %s", EG2026_ALERT_FILE)
         log.warning("SIGUIENTE PASO: correr scripts/ingest_datosabiertos.py cuando esté listo")
         return 2  # exit code 2 = detected

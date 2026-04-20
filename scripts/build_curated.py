@@ -107,9 +107,7 @@ def build_votos(latest: pl.DataFrame, dry_run: bool) -> int:
     return n
 
 
-def _build_aux(
-    table_name: str, base_dir: Path, latest: pl.DataFrame, dry_run: bool
-) -> int:
+def _build_aux(table_name: str, base_dir: Path, latest: pl.DataFrame, dry_run: bool) -> int:
     """Builder generico para tablas auxiliares (linea_tiempo, archivos).
 
     Mismo patron que build_votos: semi-join contra el run_ts_ms ganador por
@@ -180,6 +178,7 @@ def main() -> None:
     if not args.dry_run and not args.no_enrich:
         # Import local: enrich_curated está en scripts/ (mismo dir), no en el pythonpath por defecto.
         import sys
+
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from enrich_curated import _validate_integrity, enrich_cabecera
 

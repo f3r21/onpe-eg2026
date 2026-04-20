@@ -42,7 +42,9 @@ def test_enumerate_tuple_shape():
 def test_enumerate_coincide_con_id_acta_formula():
     """acta_id de enumerate_tasks == id_acta(id_mesa, ubigeo, id_eleccion)."""
     mesas = _make_mesas([(5507, "040102")])
-    tasks = enumerate_tasks(mesas, (ELECCION_PRESIDENCIAL, ELECCION_DIPUTADOS, ELECCION_SENADORES_NACIONAL))
+    tasks = enumerate_tasks(
+        mesas, (ELECCION_PRESIDENCIAL, ELECCION_DIPUTADOS, ELECCION_SENADORES_NACIONAL)
+    )
     for acta_id, id_mesa, ubigeo, id_eleccion in tasks:
         assert acta_id == id_acta(id_mesa, ubigeo, id_eleccion)
 
