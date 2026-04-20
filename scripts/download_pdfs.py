@@ -10,19 +10,19 @@ Denominador = actas en estado C con archivoId poblado (excluye P y las 240
 "mesa no instalada").
 
 Modos:
-    --gcs-bucket gs://onpe-eg2026-pdfs-f3r21   # streaming a GCS (recomendado para 1 TB)
+    --gcs-bucket gs://<tu-bucket>   # streaming a GCS (recomendado para 1 TB)
     (default)                                    # escribe a data/pdfs/XX/YY/... local
 
 Uso:
     # Smoke a GCS (5 PDFs)
-    uv run python scripts/download_pdfs.py --gcs-bucket gs://onpe-eg2026-pdfs-f3r21 --limit 5
+    uv run python scripts/download_pdfs.py --gcs-bucket gs://<tu-bucket> --limit 5
 
     # Full a GCS
-    uv run python scripts/download_pdfs.py --gcs-bucket gs://onpe-eg2026-pdfs-f3r21 \\
+    uv run python scripts/download_pdfs.py --gcs-bucket gs://<tu-bucket> \\
         --rps 5 --concurrency 10
 
     # Reanudar (idempotente via skip_existing)
-    uv run python scripts/download_pdfs.py --gcs-bucket gs://onpe-eg2026-pdfs-f3r21
+    uv run python scripts/download_pdfs.py --gcs-bucket gs://<tu-bucket>
 
     # Subset por tipo (tipos 3+4+5 solo = ~51 GB)
     uv run python scripts/download_pdfs.py --gcs-bucket gs://... --tipos 3,4,5
@@ -35,7 +35,7 @@ import asyncio
 import json
 import logging
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -83,7 +83,7 @@ class PdfCheckpoint:
         tmp.replace(self.path())
 
     @classmethod
-    def load(cls, run_ts_ms: int) -> "PdfCheckpoint":
+    def load(cls, run_ts_ms: int) -> PdfCheckpoint:
         data = json.loads((STATE_DIR / f"pdfs_download_{run_ts_ms}.json").read_text())
         return cls(
             run_ts_ms=data["run_ts_ms"],

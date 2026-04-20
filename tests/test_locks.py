@@ -82,10 +82,9 @@ except LockHeld as e:
 
 def test_excepcion_dentro_del_context_libera_lock(tmp_lock_path: Path):
     """Si la sección crítica levanta, el lock se libera igual (__exit__ corre)."""
-    with pytest.raises(RuntimeError):
-        with PipelineLock(path=tmp_lock_path):
-            assert tmp_lock_path.exists()
-            raise RuntimeError("boom")
+    with pytest.raises(RuntimeError), PipelineLock(path=tmp_lock_path):
+        assert tmp_lock_path.exists()
+        raise RuntimeError("boom")
     assert not tmp_lock_path.exists()
 
 

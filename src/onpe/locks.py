@@ -72,7 +72,7 @@ class PipelineLock:
         except (FileNotFoundError, json.JSONDecodeError, ValueError):
             return None
 
-    def __enter__(self) -> "PipelineLock":
+    def __enter__(self) -> PipelineLock:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # O_RDWR + O_CREAT: crea el archivo si no existe; no trunca si sí existe.
         # El truncado lo hace el write después del flock.

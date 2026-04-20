@@ -28,9 +28,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import polars as pl
 
@@ -96,7 +97,7 @@ class Checkpoint:
         tmp.replace(self.path())
 
     @classmethod
-    def load(cls, run_ts_ms: int) -> "Checkpoint":
+    def load(cls, run_ts_ms: int) -> Checkpoint:
         path = STATE_DIR / f"actas_run_{run_ts_ms}.json"
         data = json.loads(path.read_text())
         return cls(

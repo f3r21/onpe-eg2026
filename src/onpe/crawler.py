@@ -26,7 +26,6 @@ import polars as pl
 from onpe.client import OnpeClient
 from onpe.endpoints import (
     AMBITOS_TODOS,
-    AMBITO_PERU,
     ELECCION_PRESIDENCIAL,
     departamentos,
     distritos,

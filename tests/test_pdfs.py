@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from onpe.pdfs import (
     PDFS_SHARD_DEPTH,
-    PDFS_SHARD_WIDTH,
     check_disk_space,
     compute_checksum,
     pdf_local_path,

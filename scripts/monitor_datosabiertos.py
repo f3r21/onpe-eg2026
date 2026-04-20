@@ -25,7 +25,6 @@ import json
 import logging
 import sys
 from dataclasses import asdict
-from pathlib import Path
 
 from onpe.datosabiertos import Dataset, find_eg2026, list_onpe_datasets
 from onpe.storage import DATA_DIR, ms_to_lima_iso, utc_now_ms

@@ -132,7 +132,7 @@ data/
 
 - **Voto preferencial**: sin endpoint API en ONPE. Disponible solo en PDFs de escrutinio. Excluido del 100% actual; opción OCR deferred.
 - **DQ Nivel 4 real**: pendiente publicación ONPE en datosabiertos (~4 semanas post-JNE). Monitor semanal activo detectará automáticamente.
-- **PDFs binarios**: descarga en GCS (`gs://onpe-eg2026-pdfs-v2`) en curso; ~1 TB, ETA ~2 días. No bloquea el dataset estructurado.
+- **PDFs binarios**: descarga a GCS en curso (bucket configurable vía `--gcs-bucket gs://<tu-bucket>`); ~1 TB, ETA ~2 días. No bloquea el dataset estructurado.
 - **Mapeo RENIEC ↔ ONPE ubigeos**: la comparativa EG2021 vs EG2026 a nivel distrito individual requiere tabla cross-walk. Agregado nacional funciona OK.
 
 ## 🙏 Agradecimientos

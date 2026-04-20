@@ -28,13 +28,12 @@ import argparse
 import asyncio
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 
 import polars as pl
 
 from onpe.client import ClientConfig, OnpeClient, OnpeError
 from onpe.endpoints import acta_detalle
-from onpe.storage import DATA_DIR, ms_to_lima_iso, utc_now_ms
+from onpe.storage import DATA_DIR, utc_now_ms
 
 log = logging.getLogger("anomaly240")
 

@@ -25,8 +25,8 @@ import polars as pl
 
 from onpe.client import OnpeClient
 from onpe.endpoints import (
-    AMBITOS_TODOS,
     AMBITO_PERU,
+    AMBITOS_TODOS,
     ELECCION_PRESIDENCIAL,
     listar_actas,
 )

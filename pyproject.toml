@@ -5,7 +5,7 @@ description = "Ingesta de resultados ONPE EG2026 desde el API reverse-engineered
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-authors = [{ name = "f3r21", email = "f3r21@icloud.com" }]
+authors = [{ name = "f3r21", email = "31838677+f3r21@users.noreply.github.com" }]
 dependencies = [
     "httpx[http2]>=0.27",
     "tenacity>=8.5",

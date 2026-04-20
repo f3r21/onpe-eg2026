@@ -238,7 +238,7 @@ Ver plan detallado en la sesión Claude Code `/plan` (2026-04-18). Estado al 202
 - F1 Dashboard `data/dashboard/index.html` autocontenido
 
 **En curso — descarga PDFs**:
-- D1 download_pdfs → GCS: running. Endpoint descubierto 2026-04-19 via DevTools: `GET /presentacion-backend/actas/file?id={archivoId}` → `{success, data: signed_s3_url}`. Destino: `gs://onpe-eg2026-pdfs-f3r21` (proyecto `onpe-eg2026-f3r21` bajo org `f03436931-org`). Framework streaming S3→GCS con `asyncio.to_thread` para upload sync (fix perf 0.6→3.2 PDFs/s). ETA ~2.6 días para 725,782 PDFs (~1 TB).
+- D1 download_pdfs → GCS: running. Endpoint descubierto 2026-04-19 via DevTools: `GET /presentacion-backend/actas/file?id={archivoId}` → `{success, data: signed_s3_url}`. Destino: bucket GCS configurable vía `--gcs-bucket gs://<tu-bucket>` (proyecto y org del usuario). Framework streaming S3→GCS con `asyncio.to_thread` para upload sync (fix perf 0.6→3.2 PDFs/s). ETA ~2.6 días para 725,782 PDFs (~1 TB).
 
 **Blocked — esperan input externo**:
 - D5 voto preferencial: sin endpoint API descubierto. Decisión user pendiente: (a) DevTools, (b) excluir, (c) OCR PDFs, (d) esperar datosabiertos.

@@ -181,7 +181,7 @@ def main() -> None:
         # Import local: enrich_curated está en scripts/ (mismo dir), no en el pythonpath por defecto.
         import sys
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from enrich_curated import enrich_cabecera, _validate_integrity
+        from enrich_curated import _validate_integrity, enrich_cabecera
 
         logger.info("enriqueciendo curated con idAmbitoGeografico + idDistritoElectoral")
         df_cab = pl.read_parquet(CURATED_DIR / "actas_cabecera.parquet")
