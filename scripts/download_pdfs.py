@@ -26,12 +26,18 @@ Uso:
 
     # Subset por tipo (tipos 3+4+5 solo = ~51 GB)
     uv run python scripts/download_pdfs.py --gcs-bucket gs://... --tipos 3,4,5
+
+    # Descarga distribuida entre varios hosts (ver docs/DISTRIBUTED_DOWNLOAD.md)
+    # Mac:       --shard 0/3
+    # Win PC 1:  --shard 1/3
+    # Win PC 2:  --shard 2/3
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -130,6 +136,24 @@ def load_target_archivo_ids(
     if limit is not None:
         archivo_ids = archivo_ids[:limit]
     return archivo_ids
+
+
+def _shard_filter(archivo_ids: list[str], shard_m: int, shard_n: int) -> list[str]:
+    """Filtra a los archivoIds que corresponden a la shard M de N.
+
+    Usa md5 (estable cross-platform y cross-Python) en lugar de hash() built-in
+    que esta randomizado por proceso via PYTHONHASHSEED. Deterministico: el
+    mismo archivoId siempre cae en la misma shard, permitiendo resumir desde
+    cualquier worker sin coordinacion externa.
+    """
+    if not (0 <= shard_m < shard_n):
+        raise SystemExit(f"shard invalido: {shard_m}/{shard_n} (debe ser 0 <= M < N)")
+    return [
+        aid
+        for aid in archivo_ids
+        if int(hashlib.md5(aid.encode("utf-8"), usedforsecurity=False).hexdigest(), 16) % shard_n
+        == shard_m
+    ]
 
 
 async def _run(
@@ -235,6 +259,17 @@ def main() -> None:
         default=None,
         help="comma-separated tipos a filtrar (1=escrutinio, 2=inst+sufragio combinada, 3=inst, 4=sufragio, 5=resolución)",
     )
+    parser.add_argument(
+        "--shard",
+        type=str,
+        default=None,
+        metavar="M/N",
+        help=(
+            "particion distribuida: worker M de N. "
+            "Filtra archivoIds via md5(aid) %% N == M. "
+            "Ej: --shard 0/3 en Mac, --shard 1/3 en WinPC1, --shard 2/3 en WinPC2."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -253,6 +288,22 @@ def main() -> None:
         len(ids),
         tipos or "todos",
     )
+
+    if args.shard:
+        try:
+            shard_m, shard_n = (int(x) for x in args.shard.split("/", 1))
+        except ValueError as e:
+            raise SystemExit(f"--shard debe ser M/N (e.g. 1/3), se recibio {args.shard!r}") from e
+        total_pre = len(ids)
+        ids = _shard_filter(ids, shard_m, shard_n)
+        log.info(
+            "shard %d/%d aplicada: %d archivoIds (de %d universo, ~%.1f%% esperado)",
+            shard_m,
+            shard_n,
+            len(ids),
+            total_pre,
+            100 / shard_n,
+        )
 
     ck = asyncio.run(_run(ids, args.rps, args.concurrency, args.resume, args.gcs_bucket))
     log.info(

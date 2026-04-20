@@ -62,7 +62,7 @@ scripts/
   dashboard.py                    # HTML estático salud del pipeline → data/dashboard/index.html
   investigate_anomaly_240.py      # diagnostico re-fetch + clasificar 240 C sin detalle
   download_geojsons.py            # descarga peruLow.json
-  download_pdfs.py                # descarga masiva PDFs (blocked por DevTools endpoint)
+  download_pdfs.py                # descarga masiva PDFs a GCS, soporta --shard M/N distribuido
   migrate_null_dtypes.py          # one-shot: castear columnas Parquet null a String
   validate_ambitos.py             # sanity check de la segregación Perú/Exterior en dim/
 

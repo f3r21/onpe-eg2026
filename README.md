@@ -76,6 +76,10 @@ nohup caffeinate -dims uv run python scripts/download_pdfs.py \
   --gcs-bucket gs://<tu-bucket> --rps 12 --concurrency 20 \
   > logs/pdfs.log 2>&1 & disown
 # 725k PDFs ≈ 1 TB ≈ 2-3 días a 3 PDFs/s. Idempotente (skip_existing en GCS).
+#
+# Descarga distribuida en varios hosts (Mac + Windows, etc.) — reduce ETA 3x.
+# Cada worker corre con `--shard M/N`; particiones disjuntas via md5.
+# Ver docs/DISTRIBUTED_DOWNLOAD.md para el setup completo.
 ```
 
 ## Flujo diario (durante conteo activo)
