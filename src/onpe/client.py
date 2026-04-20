@@ -127,7 +127,7 @@ class OnpeClient:
             except httpx.TransportError as e:
                 raise OnpeTransientError(f"transport error en {path}: {e}") from e
 
-        if resp.status_code in {429, 502, 503, 504}:
+        if resp.status_code in {429, 500, 502, 503, 504}:
             raise OnpeTransientError(f"{resp.status_code} en {path}")
         if resp.status_code >= 400:
             raise OnpeError(f"{resp.status_code} en {path}: {resp.text[:200]}")
