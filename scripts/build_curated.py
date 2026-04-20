@@ -28,6 +28,7 @@ FACTS_CAB = DATA_DIR / "facts" / "actas_cabecera"
 FACTS_VOT = DATA_DIR / "facts" / "actas_votos"
 FACTS_LT = DATA_DIR / "facts" / "actas_linea_tiempo"
 FACTS_ARCH = DATA_DIR / "facts" / "actas_archivos"
+FACTS_CAND = DATA_DIR / "facts" / "actas_candidatos"
 
 logger = logging.getLogger("curated")
 
@@ -171,6 +172,7 @@ def main() -> int:
         n_votos = build_votos(latest, args.dry_run)
         _build_aux("actas_linea_tiempo", FACTS_LT, latest, args.dry_run)
         _build_aux("actas_archivos", FACTS_ARCH, latest, args.dry_run)
+        _build_aux("actas_candidatos", FACTS_CAND, latest, args.dry_run)
     except FileNotFoundError as e:
         logger.critical(
             "falta insumo para build_curated: %s. "

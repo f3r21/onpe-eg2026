@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
 import json
 import logging
 import time
@@ -56,6 +55,7 @@ from onpe.pdfs import (
     download_pdf_to_gcs,
 )
 from onpe.storage import DATA_DIR, ms_to_lima_iso, utc_now_ms
+from onpe.utils import parse_shard_spec, shard_of
 
 log = logging.getLogger(__name__)
 
@@ -101,12 +101,15 @@ class PdfCheckpoint:
 
 
 def load_target_archivo_ids(
-    limit: int | None = None, tipos: tuple[int, ...] | None = None
+    limit: int | None = None,
+    tipos: tuple[int, ...] | None = None,
+    estados: tuple[str, ...] = ("C",),
 ) -> list[str]:
     """Lista de archivoId de PDFs a descargar.
 
     Filtra a:
-    - actas en estado C (terminal, no cambiarán más)
+    - actas cuyo `codigoEstadoActa` este en `estados` (default: solo C terminal).
+      Pasar ('C','E','P') para cubrir el universo completo incluyendo volatiles.
     - actas_archivos con archivoId no nulo + tipo en `tipos` si se especifica
     - skip duplicados (DataFrame.unique)
     """
@@ -116,16 +119,20 @@ def load_target_archivo_ids(
         raise SystemExit(f"falta {cab_path}. Correr pipeline antes.")
     if not arch_path.exists():
         raise SystemExit(
-            f"falta {arch_path}. La tabla actas_archivos se pobla con re-snapshot full "
-            "(task A4). Esperar a que termine antes de descargar PDFs."
+            f"falta {arch_path}. La tabla actas_archivos se pobla con re-snapshot full. "
+            "Esperar a que termine antes de descargar PDFs."
         )
 
-    c_actas = pl.scan_parquet(cab_path).filter(pl.col("codigoEstadoActa") == "C").select("idActa")
+    actas_filtradas = (
+        pl.scan_parquet(cab_path)
+        .filter(pl.col("codigoEstadoActa").is_in(list(estados)))
+        .select("idActa")
+    )
     lf = pl.scan_parquet(arch_path)
     if tipos:
         lf = lf.filter(pl.col("tipo").is_in(list(tipos)))
     archivo_ids = (
-        lf.join(c_actas, on="idActa", how="inner")
+        lf.join(actas_filtradas, on="idActa", how="inner")
         .select("archivoId")
         .unique()
         .drop_nulls()
@@ -141,19 +148,13 @@ def load_target_archivo_ids(
 def _shard_filter(archivo_ids: list[str], shard_m: int, shard_n: int) -> list[str]:
     """Filtra a los archivoIds que corresponden a la shard M de N.
 
-    Usa md5 (estable cross-platform y cross-Python) en lugar de hash() built-in
-    que esta randomizado por proceso via PYTHONHASHSEED. Deterministico: el
-    mismo archivoId siempre cae en la misma shard, permitiendo resumir desde
-    cualquier worker sin coordinacion externa.
+    Wrapper thin sobre `onpe.utils.shard_of` manteniendo la firma previa
+    para compatibilidad. Ver utils.shard_of para detalles de la estrategia
+    (md5 deterministico cross-platform).
     """
     if not (0 <= shard_m < shard_n):
         raise SystemExit(f"shard invalido: {shard_m}/{shard_n} (debe ser 0 <= M < N)")
-    return [
-        aid
-        for aid in archivo_ids
-        if int(hashlib.md5(aid.encode("utf-8"), usedforsecurity=False).hexdigest(), 16) % shard_n
-        == shard_m
-    ]
+    return [aid for aid in archivo_ids if shard_of(aid, shard_n) == shard_m]
 
 
 async def _run(
@@ -260,6 +261,16 @@ def main() -> None:
         help="comma-separated tipos a filtrar (1=escrutinio, 2=inst+sufragio combinada, 3=inst, 4=sufragio, 5=resolución)",
     )
     parser.add_argument(
+        "--estados",
+        type=str,
+        default="C",
+        help=(
+            "comma-separated codigoEstadoActa a incluir. "
+            "Default 'C' (terminal). Usar 'C,E,P' para universo completo "
+            "incluyendo actas volatiles (~10.6% extra PDFs)."
+        ),
+    )
+    parser.add_argument(
         "--shard",
         type=str,
         default=None,
@@ -282,18 +293,17 @@ def main() -> None:
         check_disk_space(PDFS_DIR, required_gb=60.0)
 
     tipos = tuple(int(t) for t in args.tipos.split(",")) if args.tipos else None
-    ids = load_target_archivo_ids(limit=args.limit, tipos=tipos)
+    estados = tuple(s.strip().upper() for s in args.estados.split(","))
+    ids = load_target_archivo_ids(limit=args.limit, tipos=tipos, estados=estados)
     log.info(
-        "universo de PDFs: %d archivoIds (tipos=%s)",
+        "universo de PDFs: %d archivoIds (estados=%s, tipos=%s)",
         len(ids),
+        ",".join(estados),
         tipos or "todos",
     )
 
     if args.shard:
-        try:
-            shard_m, shard_n = (int(x) for x in args.shard.split("/", 1))
-        except ValueError as e:
-            raise SystemExit(f"--shard debe ser M/N (e.g. 1/3), se recibio {args.shard!r}") from e
+        shard_m, shard_n = parse_shard_spec(args.shard)
         total_pre = len(ids)
         ids = _shard_filter(ids, shard_m, shard_n)
         log.info(
