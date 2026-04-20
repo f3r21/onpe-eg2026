@@ -33,7 +33,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--force", action="store_true", help="re-descargar aunque ya exista")
     parser.add_argument(
-        "--only-country", action="store_true",
+        "--only-country",
+        action="store_true",
         help="solo descargar peruLow.json (skip deptos + provs)",
     )
     args = parser.parse_args()
@@ -73,9 +74,7 @@ def main() -> None:
     df_provs = pl.read_parquet(provs_path).filter(pl.col("idAmbitoGeografico") == 1)
     prov_ubigeos = df_provs.get_column("ubigeo").to_list()
     log.info("target: %d provincias", len(prov_ubigeos))
-    prov_results = download_provincias(
-        GEOJSON_DIR / "provincias", prov_ubigeos, force=args.force
-    )
+    prov_results = download_provincias(GEOJSON_DIR / "provincias", prov_ubigeos, force=args.force)
     ok_prov = sum(1 for v in prov_results.values() if v)
     log.info("provincias: %d/%d OK", ok_prov, len(prov_results))
 

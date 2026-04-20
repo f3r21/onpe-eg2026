@@ -26,10 +26,12 @@ def _make_listing_html(datasets: list[tuple[str, str]]) -> bytes:
 
 def _make_mock_client(body: bytes, status: int = 200) -> httpx.Client:
     """httpx.Client con MockTransport que devuelve body fijo."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             status, content=body, headers={"content-type": "text/html; charset=utf-8"}
         )
+
     return httpx.Client(transport=httpx.MockTransport(handler), timeout=5)
 
 
@@ -63,10 +65,12 @@ def test_dataset_matches_eg2026_no_match_otros_años():
 
 
 def test_list_onpe_datasets_parses_articles():
-    html = _make_listing_html([
-        ("Resultados por mesa EG2026", "/dataset/eg2026"),
-        ("Consulta Popular 2025", "/dataset/consulta-2025"),
-    ])
+    html = _make_listing_html(
+        [
+            ("Resultados por mesa EG2026", "/dataset/eg2026"),
+            ("Consulta Popular 2025", "/dataset/consulta-2025"),
+        ]
+    )
     client = _make_mock_client(html)
     # Single page to avoid pagination complexity
     datasets = list_onpe_datasets(max_pages=1, client=client)

@@ -87,9 +87,7 @@ async def _crawl_one_ambito(
             )
     log.info("ambito=%d provincias: %d", id_ambito, len(provs_flat))
 
-    prov_pairs = [
-        (_ubigeo_key(r), r.get("ubigeoDepartamento")) for r in provs_flat
-    ]
+    prov_pairs = [(_ubigeo_key(r), r.get("ubigeoDepartamento")) for r in provs_flat]
     dists_per_prov = await asyncio.gather(
         *(distritos(c, id_eleccion, u, id_ambito) for u, _ in prov_pairs)
     )
@@ -115,13 +113,9 @@ async def _crawl_one_ambito(
         for r in dists_flat
     ]
     # `locales` no depende de ambito — acepta cualquier ubigeo.
-    locales_per_dist = await asyncio.gather(
-        *(locales(c, u) for u, _, _ in dist_triples)
-    )
+    locales_per_dist = await asyncio.gather(*(locales(c, u) for u, _, _ in dist_triples))
     locales_flat: list[dict[str, Any]] = []
-    for (u_dist, u_prov, u_depto), lst in zip(
-        dist_triples, locales_per_dist, strict=True
-    ):
+    for (u_dist, u_prov, u_depto), lst in zip(dist_triples, locales_per_dist, strict=True):
         for r in lst:
             locales_flat.append(
                 {

@@ -21,9 +21,12 @@ def _fake_peru_low_json() -> dict:
     }
 
 
-def _mock_transport(status_code: int, body: bytes, ct: str = "application/json") -> httpx.MockTransport:
+def _mock_transport(
+    status_code: int, body: bytes, ct: str = "application/json"
+) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status_code, content=body, headers={"content-type": ct})
+
     return httpx.MockTransport(handler)
 
 

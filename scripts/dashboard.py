@@ -181,9 +181,7 @@ def _coverage_summary() -> dict[str, Any]:
     lt_rows = _parquet_row_count(CURATED_LT)
     lt_actas = 0
     if CURATED_LT.exists():
-        lt_actas = (
-            pl.scan_parquet(CURATED_LT).select(pl.col("idActa").n_unique()).collect().item()
-        )
+        lt_actas = pl.scan_parquet(CURATED_LT).select(pl.col("idActa").n_unique()).collect().item()
     out["linea_tiempo"] = {
         "rows": lt_rows,
         "unique_actas": lt_actas,
@@ -361,7 +359,9 @@ def _fmt_pct(p: float | None, precision: int = 2) -> str:
     return f"{p:.{precision}f}%"
 
 
-def _coverage_card(label: str, rows: int, actas: int | None, expected: int | None, extra: str = "") -> str:
+def _coverage_card(
+    label: str, rows: int, actas: int | None, expected: int | None, extra: str = ""
+) -> str:
     pct = (actas or rows) / expected * 100 if expected else None
     sub = f"{_fmt_int(actas or rows)}/{_fmt_int(expected)} actas" if expected else ""
     if extra:
@@ -435,7 +435,9 @@ def _render_serie(serie: list[dict[str, Any]]) -> str:
 def _render_checkpoints(ck: list[dict[str, Any]]) -> str:
     if not ck:
         return "<p class='meta'>sin runs activos</p>"
-    rows = ["<table><thead><tr><th>run</th><th>iniciado</th><th class='n'>progreso</th><th>%</th></tr></thead><tbody>"]
+    rows = [
+        "<table><thead><tr><th>run</th><th>iniciado</th><th class='n'>progreso</th><th>%</th></tr></thead><tbody>"
+    ]
     for c in ck:
         pct = c["pct"]
         rows.append(
@@ -443,7 +445,7 @@ def _render_checkpoints(ck: list[dict[str, Any]]) -> str:
             f"<td>{html.escape(c['started_iso'])}</td>"
             f"<td class='n'>{_fmt_int(c['completed'])}/{_fmt_int(c['expected'])}</td>"
             f"<td class='n'>{_fmt_pct(pct)}"
-            f"<div class='bar-container'><div class='bar' style='width:{min(pct,100):.1f}%'></div></div></td></tr>"
+            f"<div class='bar-container'><div class='bar' style='width:{min(pct, 100):.1f}%'></div></div></td></tr>"
         )
     rows.append("</tbody></table>")
     return "".join(rows)
@@ -514,7 +516,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--open", action="store_true", help="abrir en navegador al terminar")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     DASHBOARD_DIR.mkdir(parents=True, exist_ok=True)
     html_body = render_dashboard()
@@ -524,6 +528,7 @@ def main() -> None:
 
     if args.open:
         import subprocess
+
         subprocess.run(["open", str(out)], check=False)
 
 

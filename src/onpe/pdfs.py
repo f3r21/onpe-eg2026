@@ -87,9 +87,7 @@ async def fetch_signed_url(client: OnpeClient, archivo_id: str) -> str:
     if not isinstance(data, dict):
         raise OnpeError(f"respuesta no-dict para archivoId={archivo_id}: {type(data).__name__}")
     if not data.get("success"):
-        raise OnpeError(
-            f"success=false para archivoId={archivo_id}: {data.get('message') or data}"
-        )
+        raise OnpeError(f"success=false para archivoId={archivo_id}: {data.get('message') or data}")
     url = data.get("data")
     if not isinstance(url, str) or not url.startswith("https://"):
         raise OnpeError(f"URL firmada inválida para archivoId={archivo_id}: {url!r}")
@@ -111,9 +109,7 @@ class DownloadResult:
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
 )
-async def _download_to_path(
-    session: httpx.AsyncClient, signed_url: str, dst: Path
-) -> int:
+async def _download_to_path(session: httpx.AsyncClient, signed_url: str, dst: Path) -> int:
     """Descarga stream a dst. Atómico via tmp + rename.
 
     Raises:

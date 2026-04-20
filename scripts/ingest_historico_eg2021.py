@@ -105,7 +105,10 @@ def ingest_actas_mesa() -> None:
     v2_cols = [c for c in df.columns if c.startswith("v2_")]
     log.info(
         "actas_mesa wide shape: %d filas, %d base + %d v1 + %d v2 cols",
-        df.height, len(base_cols), len(v1_cols), len(v2_cols),
+        df.height,
+        len(base_cols),
+        len(v1_cols),
+        len(v2_cols),
     )
 
     # Persistir ambos formatos:
@@ -132,16 +135,22 @@ def ingest_actas_mesa() -> None:
 
     long_v1 = melt_vuelta(df, v1_cols, 1)
     long_v2 = melt_vuelta(df, v2_cols, 2) if v2_cols else pl.DataFrame()
-    long_all = pl.concat([long_v1, long_v2], how="diagonal_relaxed") if not long_v2.is_empty() else long_v1
+    long_all = (
+        pl.concat([long_v1, long_v2], how="diagonal_relaxed") if not long_v2.is_empty() else long_v1
+    )
     long_all.write_parquet(OUT_DIR / "eg2021_actas_mesa_long.parquet", compression="zstd")
     log.info(
         "eg2021_actas_mesa_long: %d filas (v1=%d, v2=%d)",
-        long_all.height, long_v1.height, long_v2.height if not long_v2.is_empty() else 0,
+        long_all.height,
+        long_v1.height,
+        long_v2.height if not long_v2.is_empty() else 0,
     )
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
 
     if not RAW_DIR.exists():
         raise SystemExit(f"falta {RAW_DIR}. Descargar CSVs primero.")

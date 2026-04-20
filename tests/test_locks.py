@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from onpe.locks import LockHeld, PipelineLock
+from onpe.locks import LockHeldError, PipelineLock
 
 
 @pytest.fixture
@@ -53,18 +53,18 @@ def test_reentrante_en_misma_instancia_libera_bien(tmp_lock_path: Path):
 
 
 def test_segundo_holder_subprocess_levanta_lockheld(tmp_lock_path: Path, tmp_path: Path):
-    """Un segundo proceso que intenta adquirir mientras estamos dentro → LockHeld."""
+    """Un segundo proceso que intenta adquirir mientras estamos dentro → LockHeldError."""
     with PipelineLock(path=tmp_lock_path):
         # Subprocess corre un snippet que intenta re-adquirir el mismo lock.
         code = f"""
 import sys
-sys.path.insert(0, {str(Path(__file__).resolve().parent.parent / 'src')!r})
+sys.path.insert(0, {str(Path(__file__).resolve().parent.parent / "src")!r})
 from pathlib import Path
-from onpe.locks import PipelineLock, LockHeld
+from onpe.locks import PipelineLock, LockHeldError
 try:
     with PipelineLock(path=Path({str(tmp_lock_path)!r})):
         sys.exit(99)
-except LockHeld as e:
+except LockHeldError as e:
     print(f"HELD_BY={{e.pid}}")
     sys.exit(42)
 """
@@ -89,13 +89,13 @@ def test_excepcion_dentro_del_context_libera_lock(tmp_lock_path: Path):
 
 
 def test_lock_held_error_tiene_pid_e_iso(tmp_lock_path: Path, tmp_path: Path):
-    """LockHeld.pid y .started_iso son accesibles en el handler."""
+    """LockHeldError.pid y .started_iso son accesibles en el handler."""
     with PipelineLock(path=tmp_lock_path):
         second = PipelineLock(path=tmp_lock_path)
         try:
             with second:
-                pytest.fail("debería haber raised LockHeld")
-        except LockHeld as e:
+                pytest.fail("debería haber raised LockHeldError")
+        except LockHeldError as e:
             assert e.pid == os.getpid()
             assert e.path == tmp_lock_path
             assert e.started_iso

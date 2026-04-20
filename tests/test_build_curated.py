@@ -13,7 +13,11 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 
 def _write_chunk(
-    base: Path, table: str, run_ts_ms: int, chunk_idx: int, df: pl.DataFrame,
+    base: Path,
+    table: str,
+    run_ts_ms: int,
+    chunk_idx: int,
+    df: pl.DataFrame,
 ) -> Path:
     date = "2026-04-18"
     part = base / table / f"snapshot_date={date}" / f"run_ts_ms={run_ts_ms}"
@@ -42,12 +46,19 @@ def _minimal_cabecera(idActa: int, run_ts_ms: int, estado: str = "C") -> pl.Data
             "snapshot_lima_iso": ["2026-04-18T09:00:00-05:00"],
         },
         schema={
-            "idActa": pl.Int64, "idEleccion": pl.Int64, "idMesaRef": pl.Int64,
-            "ubigeoDistrito": pl.String, "codigoMesa": pl.String,
-            "codigoEstadoActa": pl.String, "totalVotosEmitidos": pl.Int64,
-            "totalVotosValidos": pl.Int64, "totalElectoresHabiles": pl.Int64,
-            "totalAsistentes": pl.Int64, "porcentajeParticipacionCiudadana": pl.Float64,
-            "codigoSolucionTecnologica": pl.Int64, "snapshot_ts_ms": pl.Int64,
+            "idActa": pl.Int64,
+            "idEleccion": pl.Int64,
+            "idMesaRef": pl.Int64,
+            "ubigeoDistrito": pl.String,
+            "codigoMesa": pl.String,
+            "codigoEstadoActa": pl.String,
+            "totalVotosEmitidos": pl.Int64,
+            "totalVotosValidos": pl.Int64,
+            "totalElectoresHabiles": pl.Int64,
+            "totalAsistentes": pl.Int64,
+            "porcentajeParticipacionCiudadana": pl.Float64,
+            "codigoSolucionTecnologica": pl.Int64,
+            "snapshot_ts_ms": pl.Int64,
             "snapshot_lima_iso": pl.String,
         },
     )
@@ -65,8 +76,12 @@ def _minimal_votos(idActa: int, run_ts_ms: int) -> pl.DataFrame:
             "snapshot_ts_ms": [run_ts_ms, run_ts_ms],
         },
         schema={
-            "idActa": pl.Int64, "idEleccion": pl.Int64, "ubigeoDistrito": pl.String,
-            "descripcion": pl.String, "es_especial": pl.Boolean, "nvotos": pl.Int64,
+            "idActa": pl.Int64,
+            "idEleccion": pl.Int64,
+            "ubigeoDistrito": pl.String,
+            "descripcion": pl.String,
+            "es_especial": pl.Boolean,
+            "nvotos": pl.Int64,
             "snapshot_ts_ms": pl.Int64,
         },
     )
@@ -86,7 +101,7 @@ def tmp_data_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def test_build_curated_dedup_max_run_ts_ms(tmp_data_root: Path):
     """Mismo idActa en 2 runs → curated se queda con el run_ts_ms mayor."""
-    from build_curated import build_cabecera, build_votos  # noqa: after monkeypatch
+    from build_curated import build_cabecera, build_votos
 
     # Run 1 (más antiguo)
     _write_chunk(tmp_data_root / "facts", "actas_cabecera", 1000, 0, _minimal_cabecera(999, 1000))
@@ -112,7 +127,9 @@ def test_build_curated_skip_tablas_vacias(tmp_data_root: Path):
 
     _, latest = build_cabecera(dry_run=False)
     # linea_tiempo directory no existe
-    n = _build_aux("actas_linea_tiempo", tmp_data_root / "facts" / "actas_linea_tiempo", latest, dry_run=False)
+    n = _build_aux(
+        "actas_linea_tiempo", tmp_data_root / "facts" / "actas_linea_tiempo", latest, dry_run=False
+    )
     assert n == 0
 
 
@@ -130,7 +147,7 @@ def test_build_curated_multiples_actas_multiples_runs(tmp_data_root: Path):
     _write_chunk(tmp_data_root / "facts", "actas_cabecera", 300, 0, _minimal_cabecera(200, 300))
     _write_chunk(tmp_data_root / "facts", "actas_votos", 300, 0, _minimal_votos(200, 300))
 
-    df_cab, latest = build_cabecera(dry_run=False)
+    df_cab, _latest = build_cabecera(dry_run=False)
     assert df_cab.height == 2
     por_acta = {row["idActa"]: row["snapshot_ts_ms"] for row in df_cab.iter_rows(named=True)}
     assert por_acta[100] == 500  # max run para acta 100

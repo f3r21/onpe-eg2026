@@ -78,9 +78,7 @@ def list_onpe_datasets(
     Raises:
         httpx.HTTPError si la request falla.
     """
-    _client = client or httpx.Client(
-        timeout=30, headers=DEFAULT_HEADERS, follow_redirects=True
-    )
+    _client = client or httpx.Client(timeout=30, headers=DEFAULT_HEADERS, follow_redirects=True)
     results: list[Dataset] = []
     try:
         for page in range(max_pages):
@@ -129,9 +127,7 @@ def get_dataset_resources(url: str, client: httpx.Client | None = None) -> list[
     Returns:
         Lista de dicts con keys: name, url, format, size.
     """
-    _client = client or httpx.Client(
-        timeout=30, headers=DEFAULT_HEADERS, follow_redirects=True
-    )
+    _client = client or httpx.Client(timeout=30, headers=DEFAULT_HEADERS, follow_redirects=True)
     try:
         r = _client.get(url)
         r.raise_for_status()
@@ -141,11 +137,13 @@ def get_dataset_resources(url: str, client: httpx.Client | None = None) -> list[
         for link in soup.find_all("a", href=True):
             href = link["href"]
             if any(href.lower().endswith(ext) for ext in (".csv", ".xlsx", ".zip", ".csv.gz")):
-                resources.append({
-                    "name": link.get_text(strip=True) or href.rsplit("/", 1)[-1],
-                    "url": href if href.startswith("http") else f"{BASE_URL}{href}",
-                    "format": href.rsplit(".", 1)[-1].lower(),
-                })
+                resources.append(
+                    {
+                        "name": link.get_text(strip=True) or href.rsplit("/", 1)[-1],
+                        "url": href if href.startswith("http") else f"{BASE_URL}{href}",
+                        "format": href.rsplit(".", 1)[-1].lower(),
+                    }
+                )
         return resources
     finally:
         if client is None:

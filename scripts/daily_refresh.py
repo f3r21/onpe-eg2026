@@ -41,7 +41,7 @@ import polars as pl
 
 from onpe.actas import SnapshotConfig, snapshot_actas
 from onpe.client import ClientConfig, OnpeClient
-from onpe.locks import LockHeld, PipelineLock
+from onpe.locks import LockHeldError, PipelineLock
 from onpe.storage import DATA_DIR
 
 CURATED_CAB = DATA_DIR / "curated" / "actas_cabecera.parquet"
@@ -64,11 +64,7 @@ def _load_volatile_tasks(estados: tuple[str, ...]) -> list[tuple[int, int, str, 
     total = df.height
     volatiles = df.filter(pl.col("codigoEstadoActa").is_in(list(estados)))
     # Log distribución de estados para transparencia.
-    dist = (
-        df.group_by("codigoEstadoActa")
-        .agg(pl.len().alias("n"))
-        .sort("n", descending=True)
-    )
+    dist = df.group_by("codigoEstadoActa").agg(pl.len().alias("n")).sort("n", descending=True)
     log = logging.getLogger("daily_refresh")
     log.info("curated: %d filas totales. distribución de estados:", total)
     for row in dist.iter_rows(named=True):
@@ -125,9 +121,7 @@ async def _amain() -> int:
         help="tras el fetch, corre build_curated.py y dq_check.py",
     )
     parser.add_argument("--rps", type=float, default=10.0, help="requests por segundo")
-    parser.add_argument(
-        "--concurrency", type=int, default=10, help="concurrencia del cliente"
-    )
+    parser.add_argument("--concurrency", type=int, default=10, help="concurrencia del cliente")
     parser.add_argument(
         "--limit",
         type=int,
@@ -159,9 +153,7 @@ async def _amain() -> int:
         log.info("dry-run: se refetchearían %d actas", len(tasks))
         return 0
 
-    cfg_http = ClientConfig(
-        max_concurrent=args.concurrency, rate_per_second=args.rps
-    )
+    cfg_http = ClientConfig(max_concurrent=args.concurrency, rate_per_second=args.rps)
     cfg_snap = SnapshotConfig()
     t0 = time.perf_counter()
     # Lock advisory: previene colisión con snapshot_actas corriendo en paralelo.
@@ -169,7 +161,7 @@ async def _amain() -> int:
         with PipelineLock(metadata={"job": "daily_refresh", "estados": list(estados)}):
             async with OnpeClient(cfg_http) as c:
                 ck, stats = await snapshot_actas(c, cfg=cfg_snap, tasks_override=tasks)
-    except LockHeld as e:
+    except LockHeldError as e:
         log.error("abortando: %s", e)
         return 1
     dt = time.perf_counter() - t0

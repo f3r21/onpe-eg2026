@@ -1,5 +1,6 @@
 # onpe-eg2026
 
+[![CI](https://github.com/f3r21/onpe-eg2026/actions/workflows/ci.yml/badge.svg)](https://github.com/f3r21/onpe-eg2026/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/packaging-uv-DE5FE9)](https://github.com/astral-sh/uv)
@@ -12,7 +13,7 @@ Ingesta de resultados de las **Elecciones Generales Perú 2026** desde el API re
 
 **Dataset**: 463,830 actas × 5 elecciones · 18.6M filas de votos · 222 GeoJSONs · histórico EG2021 · 4 niveles de Data Quality.
 
-**Docs**: [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) · [Release notes v1.0](docs/RELEASE_NOTES_v1.0.md) · [fuentes_datos.md](fuentes_datos.md)
+**Docs**: [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) · [ARCHITECTURE](docs/ARCHITECTURE.md) · [SECURITY](SECURITY.md) · [Release notes v1.0](docs/RELEASE_NOTES_v1.0.md) · [fuentes_datos.md](fuentes_datos.md)
 
 Cubre las 5 elecciones simultáneas:
 
@@ -32,6 +33,9 @@ Ver `fuentes_datos.md` para el mapa completo de endpoints, la fórmula determin�
 brew install uv
 uv sync             # instala runtime
 uv sync --extra dev # runtime + dev deps (pytest, ruff)
+
+# Opcional: configurar variables de entorno (solo si usás descarga de PDFs a GCS)
+cp .env.example .env  # editá .env con tus valores
 ```
 
 Requiere Python 3.12+.
@@ -212,7 +216,7 @@ scripts/
 | Síntoma | Causa probable | Fix |
 |---|---|---|
 | `OnpeError: no-JSON en /xxx (content-type=text/html)` | CloudFront rechazó el request (headers incorrectos o patrón de scraping). | Verificar `DEFAULT_HEADERS` en `src/onpe/client.py`. No aumentar rps > 15. |
-| `LockHeld: pipeline_lock ocupado por PID=N` | Otro `snapshot_actas` o `daily_refresh` corriendo. | `ps -ef \| grep snapshot_actas` — esperar o kill si zombie. |
+| `LockHeldError: pipeline_lock ocupado por PID=N` | Otro `snapshot_actas` o `daily_refresh` corriendo. | `ps -ef \| grep snapshot_actas` — esperar o kill si zombie. |
 | `SchemaDriftError en _flush_chunk` | ONPE cambió el tipo de una columna. | Inspeccionar el error, ajustar `SCHEMAS` en `src/onpe/schemas.py` tras verificar en vivo. |
 | `build_curated OOM` | Chunk lf demasiado grande. | Ya usa `sink_parquet` streaming; bajar `CHUNK_SIZE` en `SnapshotConfig` si persiste. |
 | `actas_linea_tiempo.parquet` casi vacío | Snapshot pre-task-#45 (features agregados post-ingesta). | Correr un re-snapshot full (`snapshot_actas.py --rps 15`). |
