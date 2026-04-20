@@ -21,6 +21,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from download_pdfs import _shard_filter
 
+from onpe.utils import parse_shard_spec, shard_of
+
 
 def _hex_ids(n: int, seed: int = 0) -> list[str]:
     """Genera n archivoIds sinteticos con formato hex-24 (mismo que ONPE)."""
@@ -81,3 +83,48 @@ def test_shard_single_vs_one_cubre_todo():
     """--shard 0/1 es equivalente a no usar --shard (todos los ids)."""
     ids = _hex_ids(100)
     assert _shard_filter(ids, 0, 1) == ids
+
+
+# --- Tests para onpe.utils.shard_of (reusable en snapshot_actas) ---
+
+
+def test_shard_of_acepta_str_e_int():
+    """shard_of funciona con str e int, da mismo resultado."""
+    # El convert a str via str() dentro de shard_of garantiza consistencia
+    assert shard_of(12345, 3) == shard_of("12345", 3)
+    assert shard_of("abc", 5) == shard_of("abc", 5)  # deterministico
+
+
+def test_shard_of_distribuye_uniforme_sobre_ints():
+    """Testeo con idMesa sinteticos (ints como los usa snapshot_actas)."""
+    id_mesas = list(range(10000))  # 10k mesas artificiales
+    shards = {m: 0 for m in range(3)}
+    for mid in id_mesas:
+        shards[shard_of(mid, 3)] += 1
+    # Cada bucket ~3333, drift tolerable
+    for m, count in shards.items():
+        drift = abs(count - 10000 / 3) / (10000 / 3)
+        assert drift < 0.05, f"shard {m}/3 drift {drift:.1%}"
+
+
+# --- Tests para parse_shard_spec ---
+
+
+def test_parse_shard_spec_formato_valido():
+    """'1/3' -> (1, 3)."""
+    assert parse_shard_spec("1/3") == (1, 3)
+    assert parse_shard_spec("0/1") == (0, 1)
+
+
+def test_parse_shard_spec_formato_invalido_levanta():
+    """'abc', '1', '1-3' -> SystemExit."""
+    for bad in ("abc", "1", "1-3", "1/"):
+        with pytest.raises(SystemExit):
+            parse_shard_spec(bad)
+
+
+def test_parse_shard_spec_rango_invalido_levanta():
+    """M >= N o M < 0 -> SystemExit."""
+    for bad in ("3/3", "-1/3", "5/2"):
+        with pytest.raises(SystemExit):
+            parse_shard_spec(bad)

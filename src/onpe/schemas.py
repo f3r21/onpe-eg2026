@@ -129,6 +129,26 @@ SCHEMAS: dict[str, dict[str, pl.DataType]] = {
         "snapshot_ts_ms": pl.Int64,
         "snapshot_lima_iso": pl.String,
     },
+    # Tabla candidato-granular: una fila por (acta, partido, candidato). Expande
+    # el array detalle.candidato[] que `_first_candidato` descartaba. Relevante
+    # sobre todo para Senadores (hasta 29 candidatos por lista) y Diputados.
+    # Presidencial y Parlamento Andino suelen tener 1 candidato por lista, por
+    # lo que sus filas en esta tabla son equivalentes a las cand_* de actas_votos.
+    "actas_candidatos": {
+        "idActa": pl.Int64,
+        "idEleccion": pl.Int64,
+        "ubigeoDistrito": pl.String,
+        # ccodigo del partido/agrupacion: join con actas_votos via (idActa, ccodigo).
+        "partido_ccodigo": pl.String,
+        # Orden dentro de la lista del partido (0-based).
+        "candidato_idx": pl.Int64,
+        "apellidoPaterno": pl.String,
+        "apellidoMaterno": pl.String,
+        "nombres": pl.String,
+        "cdocumentoIdentidad": pl.String,
+        "snapshot_ts_ms": pl.Int64,
+        "snapshot_lima_iso": pl.String,
+    },
 }
 
 

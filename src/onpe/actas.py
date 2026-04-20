@@ -199,6 +199,13 @@ _NUMERIC_SCHEMAS: dict[str, dict[str, pl.DataType]] = {
 
 
 def _first_candidato(cand: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Extrae el PRIMER candidato del array del JSON detalle.candidato.
+
+    Se conserva para mantener las columnas cand_* denormalizadas en
+    actas_votos (consumers legacy y queries rapidas). Para el universo
+    completo de candidatos (Senado/Diputados con N candidatos por lista),
+    usar `_all_candidatos` + la tabla `actas_candidatos`.
+    """
     if not cand:
         return {}
     c = cand[0]
@@ -208,6 +215,43 @@ def _first_candidato(cand: list[dict[str, Any]] | None) -> dict[str, Any]:
         "cand_nombres": c.get("nombres"),
         "cand_doc": c.get("cdocumentoIdentidad"),
     }
+
+
+def _all_candidatos(
+    cand_list: list[dict[str, Any]] | None,
+    *,
+    acta_id: int,
+    id_eleccion: int | None,
+    ubigeo_distrito: str,
+    partido_ccodigo: str | None,
+    stamps: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Expande TODOS los candidatos de un detalle.candidato[] en filas.
+
+    Para Senado (idEleccion 14, 15) cada agrupacion puede tener hasta 29
+    candidatos, y `_first_candidato` descartaba 28. Esta funcion preserva
+    el array completo a la tabla `actas_candidatos`.
+
+    Retorna lista vacia si cand_list es None o vacia (caso comun para
+    Presidencial donde hay solo 1 candidato y ya se guarda en actas_votos).
+    """
+    if not cand_list:
+        return []
+    return [
+        {
+            "idActa": acta_id,
+            "idEleccion": id_eleccion,
+            "ubigeoDistrito": ubigeo_distrito,
+            "partido_ccodigo": partido_ccodigo,
+            "candidato_idx": i,
+            "apellidoPaterno": c.get("apellidoPaterno"),
+            "apellidoMaterno": c.get("apellidoMaterno"),
+            "nombres": c.get("nombres"),
+            "cdocumentoIdentidad": c.get("cdocumentoIdentidad"),
+            **stamps,
+        }
+        for i, c in enumerate(cand_list)
+    ]
 
 
 def normalize_acta(
@@ -221,18 +265,22 @@ def normalize_acta(
     list[dict[str, Any]],
     list[dict[str, Any]],
     list[dict[str, Any]],
+    list[dict[str, Any]],
 ]:
-    """Parte la respuesta en (cabecera_row, votos, linea_tiempo, archivos).
+    """Parte la respuesta en (cabecera, votos, linea_tiempo, archivos, candidatos).
 
     - `linea_tiempo` es la traza de transiciones de estado del acta (una fila
       por evento). Longitud variable; vacía para Pendientes.
     - `archivos` es la lista de PDFs adjuntos (acta de sufragio, escrutinio).
       Longitud tipicamente 2 para todas las mesas (incluso Pendientes).
+    - `candidatos` es el array completo de candidato[] por detalle[] para
+      elecciones con N candidatos por lista (Senado, Diputados). Puede
+      estar vacio si la eleccion tiene 1 solo candidato por lista (Presi).
 
-    Si la mesa no existe (codigoMesa is None), devuelve (None, [], [], []).
+    Si la mesa no existe (codigoMesa is None), devuelve (None, [], [], [], []).
     """
     if not data or data.get("codigoMesa") is None:
-        return None, [], [], []
+        return None, [], [], [], []
 
     acta_id = int(data.get("id") or acta_id_fallback)
     id_eleccion = data.get("idEleccion")
@@ -248,15 +296,17 @@ def normalize_acta(
     cabecera.update(stamps)
 
     votos: list[dict[str, Any]] = []
+    candidatos: list[dict[str, Any]] = []
     for d in data.get("detalle") or []:
         desc = d.get("descripcion") or ""
+        ccodigo = d.get("ccodigo")
         row = {
             "idActa": acta_id,
             "idEleccion": id_eleccion,
             "ubigeoDistrito": ubigeo_distrito,
             "descripcion": desc,
             "es_especial": desc in _SPECIAL_DESCRIPTIONS,
-            "ccodigo": d.get("ccodigo"),
+            "ccodigo": ccodigo,
             "nposicion": d.get("nposicion"),
             "nvotos": d.get("nvotos"),
             "nagrupacionPolitica": d.get("nagrupacionPolitica"),
@@ -268,9 +318,20 @@ def normalize_acta(
             "sexo": d.get("sexo"),
             "totalCandidatos": d.get("totalCandidatos"),
         }
-        row.update(_first_candidato(d.get("candidato")))
+        cand_list = d.get("candidato")
+        row.update(_first_candidato(cand_list))
         row.update(stamps)
         votos.append(row)
+        candidatos.extend(
+            _all_candidatos(
+                cand_list,
+                acta_id=acta_id,
+                id_eleccion=id_eleccion,
+                ubigeo_distrito=ubigeo_distrito,
+                partido_ccodigo=ccodigo,
+                stamps=stamps,
+            )
+        )
 
     linea_tiempo: list[dict[str, Any]] = []
     for idx, ev in enumerate(data.get("lineaTiempo") or []):
@@ -297,7 +358,7 @@ def normalize_acta(
         row.update(stamps)
         archivos.append(row)
 
-    return cabecera, votos, linea_tiempo, archivos
+    return cabecera, votos, linea_tiempo, archivos, candidatos
 
 
 # --- Escritura de chunks ---------------------------------------------------
@@ -342,8 +403,9 @@ def _flush_chunk(
     votos_buf: list[dict[str, Any]],
     linea_tiempo_buf: list[dict[str, Any]],
     archivos_buf: list[dict[str, Any]],
+    candidatos_buf: list[dict[str, Any]],
 ) -> None:
-    """Flushea las 4 tablas (cabecera, votos, linea_tiempo, archivos) a parquet.
+    """Flushea las 5 tablas (cabecera, votos, linea_tiempo, archivos, candidatos) a parquet.
 
     Cada tabla se escribe solo si su buffer no está vacío. Los chunks mantienen
     el mismo `chunk_idx` entre tablas para poder correlacionar runs parciales.
@@ -353,6 +415,7 @@ def _flush_chunk(
         "actas_votos": votos_buf,
         "actas_linea_tiempo": linea_tiempo_buf,
         "actas_archivos": archivos_buf,
+        "actas_candidatos": candidatos_buf,
     }
     for name, buf in tables.items():
         if not buf:
@@ -398,18 +461,21 @@ async def _fetch_one(
     list[dict[str, Any]],
     list[dict[str, Any]],
     list[dict[str, Any]],
+    list[dict[str, Any]],
     str | None,
 ]:
     """Fetch + normalize.
 
-    Devuelve (acta_id, cabecera, votos, linea_tiempo, archivos, error_o_None).
+    Devuelve (acta_id, cabecera, votos, linea_tiempo, archivos, candidatos, error_o_None).
     """
     try:
         data = await acta_detalle(c, acta_id)
     except OnpeError as e:
-        return acta_id, None, [], [], [], str(e)
-    cab, votos, linea, archivos = normalize_acta(data, acta_id, id_mesa, ubigeo, snapshot_ts_ms)
-    return acta_id, cab, votos, linea, archivos, None
+        return acta_id, None, [], [], [], [], str(e)
+    cab, votos, linea, archivos, candidatos = normalize_acta(
+        data, acta_id, id_mesa, ubigeo, snapshot_ts_ms
+    )
+    return acta_id, cab, votos, linea, archivos, candidatos, None
 
 
 async def snapshot_actas(
@@ -466,6 +532,7 @@ async def snapshot_actas(
     votos_buf: list[dict[str, Any]] = []
     linea_tiempo_buf: list[dict[str, Any]] = []
     archivos_buf: list[dict[str, Any]] = []
+    candidatos_buf: list[dict[str, Any]] = []
     stats = {"ok": 0, "vacias": 0, "fallidas": 0}
 
     # Cada cuántos batches logeamos progreso a INFO. 10 batches = 5000 actas.
@@ -488,7 +555,7 @@ async def snapshot_actas(
                 log.error("excepcion inesperada en _fetch_one: %r", item)
                 stats["fallidas"] += 1
                 continue
-            acta_id, cab, votos, linea, archivos, err = item
+            acta_id, cab, votos, linea, archivos, candidatos, err = item
             if err is not None:
                 ck.failed.append({"acta_id": acta_id, "error": err})
                 stats["fallidas"] += 1
@@ -501,6 +568,7 @@ async def snapshot_actas(
             votos_buf.extend(votos)
             linea_tiempo_buf.extend(linea)
             archivos_buf.extend(archivos)
+            candidatos_buf.extend(candidatos)
             stats["ok"] += 1
 
         # Checkpoint por batch: en caída perdemos a lo sumo `cfg.batch` actas.
@@ -514,14 +582,16 @@ async def snapshot_actas(
                 votos_buf,
                 linea_tiempo_buf,
                 archivos_buf,
+                candidatos_buf,
             )
             log.info(
-                "chunk %d flusheado (%d cab / %d votos / %d linea / %d arch), progreso %d/%d",
+                "chunk %d flusheado (%d cab / %d votos / %d linea / %d arch / %d cands), progreso %d/%d",
                 ck.next_chunk_idx,
                 len(cabecera_buf),
                 len(votos_buf),
                 len(linea_tiempo_buf),
                 len(archivos_buf),
+                len(candidatos_buf),
                 len(ck.completed_acta_ids),
                 ck.total_expected,
             )
@@ -529,6 +599,7 @@ async def snapshot_actas(
             votos_buf = []
             linea_tiempo_buf = []
             archivos_buf = []
+            candidatos_buf = []
             ck.next_chunk_idx += 1
             ck.save()
         elif (bidx + 1) % log_every_n_batches == 0:
@@ -543,7 +614,7 @@ async def snapshot_actas(
             )
 
     # Flush final de lo que quedó en buffer.
-    if cabecera_buf or votos_buf or linea_tiempo_buf or archivos_buf:
+    if cabecera_buf or votos_buf or linea_tiempo_buf or archivos_buf or candidatos_buf:
         _flush_chunk(
             ck.run_ts_ms,
             ck.next_chunk_idx,
@@ -551,14 +622,16 @@ async def snapshot_actas(
             votos_buf,
             linea_tiempo_buf,
             archivos_buf,
+            candidatos_buf,
         )
         log.info(
-            "chunk final %d flusheado (%d cab / %d votos / %d linea / %d arch)",
+            "chunk final %d flusheado (%d cab / %d votos / %d linea / %d arch / %d cands)",
             ck.next_chunk_idx,
             len(cabecera_buf),
             len(votos_buf),
             len(linea_tiempo_buf),
             len(archivos_buf),
+            len(candidatos_buf),
         )
         ck.next_chunk_idx += 1
     ck.save()
