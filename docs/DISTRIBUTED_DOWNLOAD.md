@@ -72,13 +72,56 @@ cd onpe-eg2026
 uv sync
 ```
 
-### 3. Autenticar GCP (misma cuenta que el Mac)
+### 3. Autenticar GCP via service account key
+
+El host admin del proyecto genera una vez un JSON key con scope acotado
+(solo `roles/storage.objectUser` sobre el bucket de PDFs) y lo copia de
+forma segura a cada Windows. Comandos para generar la key (solo en el host
+admin, una sola vez):
+
+```bash
+gcloud iam service-accounts create pdfs-uploader \
+  --display-name="PDFs uploader for distributed download"
+
+gcloud storage buckets add-iam-policy-binding gs://<tu-bucket> \
+  --member="serviceAccount:pdfs-uploader@<tu-proyecto>.iam.gserviceaccount.com" \
+  --role="roles/storage.objectUser"
+
+mkdir -p credentials
+gcloud iam service-accounts keys create credentials/pdfs-uploader.json \
+  --iam-account=pdfs-uploader@<tu-proyecto>.iam.gserviceaccount.com
+```
+
+El archivo `credentials/pdfs-uploader.json` queda localmente; el `.gitignore`
+lo excluye (patron `credentials/`). **Nunca committearlo**.
+
+Transferencia segura al Windows (elige una):
+
+- **rclone sync cifrado** (recomendado para maquinas remotas):
+  ```bash
+  # En Mac: sube a un bucket privado scratch
+  gsutil cp credentials/pdfs-uploader.json gs://<scratch-bucket>/
+  # En Windows (una vez autenticado con gcloud temporal o en persona):
+  gsutil cp gs://<scratch-bucket>/pdfs-uploader.json .\credentials\
+  # Borrar del scratch
+  gsutil rm gs://<scratch-bucket>/pdfs-uploader.json
+  ```
+- **scp si hay SSH entre maquinas**: `scp credentials/pdfs-uploader.json user@windows:C:/Users/.../credentials/`
+- **USB encriptado fisico** si las maquinas son accesibles en persona.
+- **1Password/Bitwarden como Secure Note** con el JSON adjunto, luego descargar en Windows.
+
+En Windows, configurar la variable de entorno apuntando al archivo:
 
 ```powershell
-gcloud auth login
-gcloud config set project <tu-proyecto-gcp>
-gcloud auth application-default login
+# Una sola vez para la sesion actual
+$env:GOOGLE_APPLICATION_CREDENTIALS = "C:\Users\<usuario>\onpe-eg2026\credentials\pdfs-uploader.json"
+
+# Permanente (para todas las sesiones futuras)
+setx GOOGLE_APPLICATION_CREDENTIALS "C:\Users\<usuario>\onpe-eg2026\credentials\pdfs-uploader.json"
 ```
+
+La libreria `google-cloud-storage` detecta automaticamente
+`GOOGLE_APPLICATION_CREDENTIALS` sin necesidad de `gcloud auth`.
 
 ### 4. Copiar curated/ desde el Mac (necesario para generar la lista de archivoIds)
 
