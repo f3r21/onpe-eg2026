@@ -18,6 +18,7 @@ htmlcov/
 *.pem
 credentials.json
 service-account*.json
+credentials/
 
 # Datos crudos (outputs del ingestor — muy grandes, regenerables)
 data/
