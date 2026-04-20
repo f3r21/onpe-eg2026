@@ -52,7 +52,7 @@ DEFAULT_COLOR = "#95a5a6"
 def ganadores_por_nivel(
     cab: pl.DataFrame,
     vot: pl.DataFrame,
-    level: str,  # 'depto' | 'provincia'
+    level: str,  # 'depto' | 'provincia' | 'distrito'
 ) -> dict[str, dict]:
     """Devuelve {ubigeo_nivel: {partido, votos, pct, total}} para Presidencial Perú."""
     if level == "depto":
@@ -61,6 +61,9 @@ def ganadores_por_nivel(
     elif level == "provincia":
         slice_ = (0, 4)
         suffix = "00"
+    elif level == "distrito":
+        slice_ = (0, 6)
+        suffix = ""
     else:
         raise ValueError(f"level inválido: {level}")
 
@@ -95,13 +98,18 @@ def ganadores_por_nivel(
 
 
 def participacion_por_nivel(cab: pl.DataFrame, level: str) -> dict[str, dict]:
-    """% participación Presidencial C por depto o provincia."""
+    """% participación Presidencial C por depto, provincia o distrito."""
     if level == "depto":
         slice_ = (0, 2)
         suffix = "0000"
-    else:
+    elif level == "provincia":
         slice_ = (0, 4)
         suffix = "00"
+    elif level == "distrito":
+        slice_ = (0, 6)
+        suffix = ""
+    else:
+        raise ValueError(f"level inválido: {level}")
 
     df = (
         cab.filter(
@@ -151,12 +159,7 @@ def enrich_feature(feat: dict, feat_id: str, ganadores: dict, participacion: dic
 def build_provincias_by_depto(
     ganadores_prov: dict, participacion_prov: dict
 ) -> dict[str, dict]:
-    """Devuelve {ubigeoDepartamento: FeatureCollection_provincias}.
-
-    Cada provincia geojson contiene polygons de los distritos; aquí agregamos
-    a nivel provincia unificando los polígonos (dissolve). Para simplicidad
-    usamos el geojson del departamento que ya tiene polígonos de provincias.
-    """
+    """Devuelve {ubigeoDepartamento: FeatureCollection_provincias}."""
     by_depto: dict[str, dict] = {}
     depto_dir = GEOJSON_DIR / "departamentos"
     for depto_path in sorted(depto_dir.glob("*.json")):
@@ -164,14 +167,10 @@ def build_provincias_by_depto(
         data = json.loads(depto_path.read_text())
         enriched_feats = []
         for feat in data.get("features", []):
-            # Cada feature en depto-geojson representa una provincia.
-            # El id viene en properties.ID (ej "040100").
             props = feat.get("properties", {})
             prov_id = str(props.get("ID") or props.get("id") or "")
             if not prov_id:
-                # Algunos tienen el id como top-level
                 prov_id = str(feat.get("id", ""))
-            # Normalizar a 6 dígitos con sufijo 00
             if len(prov_id) == 4:
                 prov_id = prov_id + "00"
             enriched = enrich_feature(feat, prov_id, ganadores_prov, participacion_prov)
@@ -183,14 +182,47 @@ def build_provincias_by_depto(
     return by_depto
 
 
+def build_distritos_by_provincia(
+    ganadores_dist: dict, participacion_dist: dict
+) -> dict[str, dict]:
+    """Devuelve {ubigeoProvincia: FeatureCollection_distritos}.
+
+    Cada provincia geojson tiene features=distritos; el id del distrito viene
+    en properties.ID (ej "040112") o como id top-level.
+    """
+    by_prov: dict[str, dict] = {}
+    prov_dir = GEOJSON_DIR / "provincias"
+    for prov_path in sorted(prov_dir.glob("*.json")):
+        prov_id = prov_path.stem
+        data = json.loads(prov_path.read_text())
+        enriched_feats = []
+        for feat in data.get("features", []):
+            props = feat.get("properties", {})
+            dist_id = str(props.get("ID") or props.get("id") or feat.get("id") or "")
+            if not dist_id:
+                continue
+            # normalizar a 6 dígitos (ej "40112" → "040112")
+            if len(dist_id) == 5:
+                dist_id = "0" + dist_id
+            enriched = enrich_feature(feat, dist_id, ganadores_dist, participacion_dist)
+            enriched_feats.append(enriched)
+        by_prov[prov_id] = {
+            "type": "FeatureCollection",
+            "features": enriched_feats,
+        }
+    return by_prov
+
+
 def render_html(
     peru_low: dict,
     provincias_by_depto: dict[str, dict],
+    distritos_by_provincia: dict[str, dict],
     meta: dict,
 ) -> str:
-    """HTML autocontenido con 2 niveles + drilldown."""
+    """HTML autocontenido con 3 niveles + drilldown."""
     peru_geojson = json.dumps(peru_low, ensure_ascii=False)
     provincias_json = json.dumps(provincias_by_depto, ensure_ascii=False)
+    distritos_json = json.dumps(distritos_by_provincia, ensure_ascii=False)
     party_colors_json = json.dumps(PARTY_COLORS, ensure_ascii=False)
 
     template = """<!doctype html>
@@ -211,6 +243,9 @@ def render_html(
            flex-wrap:wrap; }
   h1 { font-size:1.15rem; font-weight:700; letter-spacing:-0.02em; }
   .sub { color:var(--muted); font-size:0.8rem; margin-top:0.15rem; }
+  .loading { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+             background:var(--surface); padding:1rem 2rem; border-radius:0.5rem;
+             border:1px solid var(--border); z-index:2000; font-size:0.9rem; }
   .controls { display:flex; gap:0.5rem; align-items:center; }
   .btn { background:var(--surface); color:var(--text); border:1px solid var(--border);
          padding:0.4rem 0.9rem; border-radius:0.375rem; cursor:pointer;
@@ -243,7 +278,7 @@ def render_html(
 <header>
   <div>
     <h1>🇵🇪 ONPE EG2026 — Mapa Coroplético</h1>
-    <div class="sub">Click en depto para drill-down a provincias · Click fuera para volver</div>
+    <div class="sub">Click depto → provincias · Click provincia → distritos · Botón ◂ Volver</div>
   </div>
   <div class="controls">
     <span class="breadcrumb" id="breadcrumb">Perú</span>
@@ -260,6 +295,7 @@ def render_html(
 <script>
 const PERU_GEOJSON = PERU_GEOJSON_PLACEHOLDER;
 const PROVINCIAS_BY_DEPTO = PROVINCIAS_PLACEHOLDER;
+const DISTRITOS_BY_PROVINCIA = DISTRITOS_PLACEHOLDER;
 const PARTY_COLORS = PARTY_COLORS_PLACEHOLDER;
 const DEFAULT_COLOR = "DEFAULT_COLOR_PLACEHOLDER";
 
@@ -287,8 +323,9 @@ map.fitBounds(PERU_BOUNDS);
 
 let currentLayer = null;
 let currentView = 'presidencial';
-let currentLevel = 'nacional';
+let currentLevel = 'nacional';  // 'nacional' | 'provincia' | 'distrito'
 let currentDeptoId = null;
+let currentProvinciaId = null;
 
 function styleFor(feature) {
   const p = feature.properties;
@@ -351,21 +388,22 @@ function renderBreadcrumb() {
   if (currentLevel === 'nacional') {
     el.innerHTML = '<span class="current">Perú</span>';
     backBtn.disabled = true;
-  } else {
-    const deptoName = currentDeptoId.substring(0,2);
+  } else if (currentLevel === 'provincia') {
     el.innerHTML = 'Perú › <span class="current">Depto ' + currentDeptoId + '</span>';
+    backBtn.disabled = false;
+  } else {
+    el.innerHTML = 'Perú › Depto ' + currentDeptoId +
+                   ' › <span class="current">Prov ' + currentProvinciaId + '</span>';
     backBtn.disabled = false;
   }
 }
 
-function drillDown(deptoId) {
+function drillToProvincia(deptoId) {
   const provGeojson = PROVINCIAS_BY_DEPTO[deptoId];
-  if (!provGeojson) {
-    console.warn('no provincias para depto', deptoId);
-    return;
-  }
+  if (!provGeojson) { console.warn('no provincias para depto', deptoId); return; }
   currentLevel = 'provincia';
   currentDeptoId = deptoId;
+  currentProvinciaId = null;
   renderBreadcrumb();
   if (currentLayer) map.removeLayer(currentLayer);
   currentLayer = L.geoJSON(provGeojson, {
@@ -374,16 +412,42 @@ function drillDown(deptoId) {
       lyr.bindTooltip(tooltipFor(feat), { sticky: true });
       lyr.on('mouseover', e => e.target.setStyle({ weight: 3, fillOpacity: 0.92 }));
       lyr.on('mouseout', e => currentLayer.resetStyle(e.target));
+      lyr.on('click', e => {
+        const provId = e.target.feature.properties.id;
+        drillToDistrito(provId);
+      });
     }
   }).addTo(map);
-  // Fit zoom a provincias del depto
   map.fitBounds(currentLayer.getBounds(), { padding: [20, 20] });
   renderLegend(provGeojson);
 }
 
-function goBackToNacional() {
+function drillToDistrito(provinciaId) {
+  const distGeojson = DISTRITOS_BY_PROVINCIA[provinciaId];
+  if (!distGeojson || !distGeojson.features.length) {
+    console.warn('no distritos para provincia', provinciaId);
+    return;
+  }
+  currentLevel = 'distrito';
+  currentProvinciaId = provinciaId;
+  renderBreadcrumb();
+  if (currentLayer) map.removeLayer(currentLayer);
+  currentLayer = L.geoJSON(distGeojson, {
+    style: styleFor,
+    onEachFeature: (feat, lyr) => {
+      lyr.bindTooltip(tooltipFor(feat), { sticky: true });
+      lyr.on('mouseover', e => e.target.setStyle({ weight: 3, fillOpacity: 0.92 }));
+      lyr.on('mouseout', e => currentLayer.resetStyle(e.target));
+    }
+  }).addTo(map);
+  map.fitBounds(currentLayer.getBounds(), { padding: [20, 20] });
+  renderLegend(distGeojson);
+}
+
+function showNacional() {
   currentLevel = 'nacional';
   currentDeptoId = null;
+  currentProvinciaId = null;
   renderBreadcrumb();
   if (currentLayer) map.removeLayer(currentLayer);
   currentLayer = L.geoJSON(PERU_GEOJSON, {
@@ -394,12 +458,17 @@ function goBackToNacional() {
       lyr.on('mouseout', e => currentLayer.resetStyle(e.target));
       lyr.on('click', e => {
         const deptoId = e.target.feature.properties.id;
-        drillDown(deptoId);
+        drillToProvincia(deptoId);
       });
     }
   }).addTo(map);
   map.fitBounds(PERU_BOUNDS);
   renderLegend(PERU_GEOJSON);
+}
+
+function goBack() {
+  if (currentLevel === 'distrito') drillToProvincia(currentDeptoId);
+  else if (currentLevel === 'provincia') showNacional();
 }
 
 document.querySelectorAll('.btn[data-view]').forEach(b => {
@@ -408,14 +477,15 @@ document.querySelectorAll('.btn[data-view]').forEach(b => {
     b.classList.add('active');
     currentView = b.dataset.view;
     // Re-render current level
-    if (currentLevel === 'nacional') goBackToNacional();
-    else drillDown(currentDeptoId);
+    if (currentLevel === 'nacional') showNacional();
+    else if (currentLevel === 'provincia') drillToProvincia(currentDeptoId);
+    else if (currentLevel === 'distrito') drillToDistrito(currentProvinciaId);
   });
 });
 
-document.getElementById('backBtn').addEventListener('click', goBackToNacional);
+document.getElementById('backBtn').addEventListener('click', goBack);
 
-goBackToNacional();
+showNacional();
 </script>
 </body>
 </html>
@@ -424,6 +494,7 @@ goBackToNacional();
         template
         .replace("PERU_GEOJSON_PLACEHOLDER", peru_geojson)
         .replace("PROVINCIAS_PLACEHOLDER", provincias_json)
+        .replace("DISTRITOS_PLACEHOLDER", distritos_json)
         .replace("PARTY_COLORS_PLACEHOLDER", party_colors_json)
         .replace("DEFAULT_COLOR_PLACEHOLDER", DEFAULT_COLOR)
         .replace("NACTAS_PLACEHOLDER", f"{meta['n_actas']:,}")
@@ -444,12 +515,15 @@ def main() -> None:
     log.info("calculando ganadores por nivel...")
     ganadores_depto = ganadores_por_nivel(cab, vot, "depto")
     ganadores_prov = ganadores_por_nivel(cab, vot, "provincia")
+    ganadores_dist = ganadores_por_nivel(cab, vot, "distrito")
     log.info("  deptos con ganador: %d", len(ganadores_depto))
     log.info("  provincias con ganador: %d", len(ganadores_prov))
+    log.info("  distritos con ganador: %d", len(ganadores_dist))
 
     log.info("calculando participación por nivel...")
     part_depto = participacion_por_nivel(cab, "depto")
     part_prov = participacion_por_nivel(cab, "provincia")
+    part_dist = participacion_por_nivel(cab, "distrito")
 
     # País: peruLow enriquecido
     peru_low = json.loads((GEOJSON_DIR / "peruLow.json").read_text())
@@ -458,16 +532,20 @@ def main() -> None:
         for f in peru_low["features"]
     ]
 
-    # Provincias agrupadas por depto
+    # Provincias agrupadas por depto + distritos agrupados por provincia
     prov_by_depto = build_provincias_by_depto(ganadores_prov, part_prov)
+    dist_by_prov = build_distritos_by_provincia(ganadores_dist, part_dist)
     log.info("  deptos con provincias geojson: %d", len(prov_by_depto))
+    log.info("  provincias con distritos geojson: %d", len(dist_by_prov))
+    total_dist = sum(len(v["features"]) for v in dist_by_prov.values())
+    log.info("  distritos total embebidos: %d", total_dist)
 
     from datetime import datetime, timezone
     from onpe.storage import TZ_LIMA
     built_at = datetime.now(timezone.utc).astimezone(TZ_LIMA).isoformat(timespec="seconds")
     meta = {"built_at": built_at, "n_actas": cab.height}
 
-    html = render_html(peru_low, prov_by_depto, meta)
+    html = render_html(peru_low, prov_by_depto, dist_by_prov, meta)
     DASHBOARD_DIR.mkdir(parents=True, exist_ok=True)
     out = DASHBOARD_DIR / "mapa_eg2026.html"
     out.write_text(html)
