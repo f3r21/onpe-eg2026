@@ -47,7 +47,6 @@ data/
   │   ├── actas_votos.parquet          (18.6M × 22 cols)
   │   ├── actas_linea_tiempo.parquet   (1.27M eventos)
   │   └── actas_archivos.parquet       (811k metadata de PDFs)
-  ├── historico/         baseline EG2021
   ├── analytics/         reports + agregados downstream
   └── dashboard/         HTMLs generados
 

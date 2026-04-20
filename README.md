@@ -11,7 +11,7 @@
 
 Ingesta de resultados de las **Elecciones Generales Perú 2026** desde el API reverse-engineered de ONPE (`resultadoelectoral.onpe.gob.pe/presentacion-backend/`). Produce un data lake en Parquet con particiones Hive, listo para consumir con Polars, DuckDB o pandas.
 
-**Dataset**: 463,830 actas × 5 elecciones · 18.6M filas de votos · 222 GeoJSONs · histórico EG2021 · 4 niveles de Data Quality.
+**Dataset**: 463,830 actas × 5 elecciones · 18.6M filas de votos · 222 GeoJSONs · 4 niveles de Data Quality. **Scope**: Elecciones Generales Perú 2026 — **primera vuelta** (12-abr-2026). Solo fuentes oficiales del gobierno peruano (ONPE principalmente; JNE, RENIEC y El Peruano en roadmap).
 
 **Docs**: [CHANGELOG](CHANGELOG.md) · [CONTRIBUTING](CONTRIBUTING.md) · [ARCHITECTURE](docs/ARCHITECTURE.md) · [SECURITY](SECURITY.md) · [Release notes v1.0](docs/RELEASE_NOTES_v1.0.md) · [fuentes_datos.md](fuentes_datos.md)
 

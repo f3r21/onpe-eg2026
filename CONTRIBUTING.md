@@ -49,11 +49,11 @@ uv run python scripts/smoke.py    # validación end-to-end contra API real
 
 Ver el [CHANGELOG.md](CHANGELOG.md) sección "Conocido" para gaps actuales:
 
-- **Mapeo RENIEC ↔ ONPE ubigeos** — tabla cruzada para comparativas longitudinales EG2021 vs EG2026 a nivel distrito.
+- **Mapeo RENIEC ↔ ONPE ubigeos** — tabla cruzada necesaria para joins con padrón electoral RENIEC 2026.
 - **OCR de PDFs de escrutinio** para extraer voto preferencial.
 - **DQ Nivel 4** implementación específica cuando ONPE publique en datosabiertos.
 - **Dashboards** con gráficos temporales del conteo (más allá del mapa actual).
-- **Predictor electoral** baseline usando EG2021 features + Polars + scikit-learn.
+- **Scrapers JNE / El Peruano** para enriquecer candidatos y capturar resoluciones oficiales.
 - **Detección de anomalías** (z-score outliers por partido × distrito, sospecha de fraude).
 
 ## Código de conducta
