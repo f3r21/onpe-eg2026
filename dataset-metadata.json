@@ -1,0 +1,73 @@
+{
+  "title": "onpe-eg2026 — Elecciones Generales Perú 2026 (Primera Vuelta)",
+  "id": "f3r21/onpe-eg2026",
+  "subtitle": "463,830 actas × 5 elecciones · 18.6M votos · 222 GeoJSONs · DQ 14/14",
+  "description": "Dataset estructurado de las Elecciones Generales del Perú 2026 primera vuelta (12 de abril de 2026). Scrape reverse-engineered del API de ONPE (Oficina Nacional de Procesos Electorales) con 463,830 actas de mesa, 18.6M filas de votos por agrupación política, serie temporal de aggregates capturada cada 15 min durante el conteo, metadata de 811k PDFs escaneados, 222 GeoJSONs oficiales (país + 25 departamentos + 196 provincias), y validación de Data Quality en 4 niveles (14/14 PASS). Cubre 5 elecciones simultáneas: Presidencial, Parlamento Andino, Diputados, Senadores nacional y regional. Solo fuentes oficiales del gobierno peruano. Ver methodology, data dictionary y limitations en el repositorio para detalles.",
+  "isPrivate": false,
+  "licenses": [
+    {
+      "name": "CC-BY-4.0",
+      "url": "https://creativecommons.org/licenses/by/4.0/"
+    }
+  ],
+  "keywords": [
+    "elections",
+    "peru",
+    "political-science",
+    "open-data",
+    "EG2026",
+    "ONPE",
+    "latin-america",
+    "data-quality",
+    "geospatial",
+    "time-series",
+    "2026-elections"
+  ],
+  "collaborators": [],
+  "resources": [
+    {
+      "path": "actas_cabecera.parquet",
+      "description": "Totales por acta (mesa × elección). 463,830 filas × 33 columnas."
+    },
+    {
+      "path": "actas_votos.parquet",
+      "description": "Votos por (acta × agrupación política). ~18.6M filas. Incluye votos especiales (blancos, nulos, impugnados)."
+    },
+    {
+      "path": "actas_candidatos.parquet",
+      "description": "Array completo de candidatos por (acta × partido). Crítico para Senado y Diputados."
+    },
+    {
+      "path": "actas_linea_tiempo.parquet",
+      "description": "Eventos de transición de estado por acta. ~1.27M filas."
+    },
+    {
+      "path": "actas_archivos.parquet",
+      "description": "Metadata de 811k PDFs escaneados (archivoId, tipo, fecha). Los PDFs mismos están en GCS bucket."
+    },
+    {
+      "path": "dim/",
+      "description": "Catálogos estáticos: mesas (92,766), distritos electorales (27), distritos (2,102), departamentos (30), provincias (273), locales de votación (10,553)."
+    },
+    {
+      "path": "geojson/",
+      "description": "222 GeoJSONs oficiales ONPE: peruLow.json (país), 25 departamentos, 196 provincias."
+    },
+    {
+      "path": "docs/DATA_DICTIONARY.md",
+      "description": "Diccionario completo por columna."
+    },
+    {
+      "path": "docs/METHODOLOGY.md",
+      "description": "Metodología de recolección, curación y validación."
+    },
+    {
+      "path": "docs/LIMITATIONS.md",
+      "description": "Gaps conocidos y restricciones."
+    },
+    {
+      "path": "CITATION.cff",
+      "description": "Formato de citación BibTeX / CFF."
+    }
+  ]
+}
