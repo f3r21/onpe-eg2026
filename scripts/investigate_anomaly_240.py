@@ -179,8 +179,7 @@ def main() -> None:
             buckets["resolved"],
         )
     if buckets.get("mesa_no_instalada", 0) / max(total, 1) >= 0.9:
-        log.info("  ≥90%% son mesa NO instalada (estadoActa=N) — anomalía explicada")
-        log.info("  ACCIÓN: actualizar CLAUDE.md task #58 como closed con justificación")
+        log.info("  >=90%% son mesa NO instalada (estadoActa=N) - anomalia explicada")
     elif buckets.get("other", 0) > 0:
         log.info(
             "  %d actas en bucket 'other' — requiere investigación case-by-case", buckets["other"]

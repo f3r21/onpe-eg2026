@@ -135,8 +135,9 @@ nohup caffeinate -dims uv run python scripts/snapshot_actas.py \
 uv run ruff check src scripts
 uv run ruff format src scripts
 
-# Tests (aún no implementados — task #48 pendiente)
+# Tests (87 pytest, ejecutar con --cov=src/onpe para ver cobertura)
 uv run pytest
+uv run pytest --cov=src/onpe --cov-report=term-missing
 ```
 
 ## Override del DATA_DIR
@@ -217,13 +218,12 @@ Mantenimiento: si ONPE añade una columna nueva, validate_chunk emite WARNING pe
 
 ## Entorno
 
-- Mac M2 24 GB, macOS.
 - Python 3.12+, uv para deps, Polars + httpx + tenacity.
-- El repo corre directamente en el Mac del usuario — Cowork mode (otro entorno Claude) tiene un sandbox aislado con RAM limitada, pero **Claude Code corre nativo**, sin esas limitaciones.
+- Los LaunchAgents en `ops/launchd/` asumen macOS; en otros OS adaptar a systemd/cron.
 
 ## Plan de trabajo hacia el 100%
 
-Ver plan detallado en la sesión Claude Code `/plan` (2026-04-18). Estado al 2026-04-18 21:40:
+Estado al 2026-04-20:
 
 **Completadas 2026-04-18/19**:
 - A1 locks.py + integración (fcntl advisory en `data/state/.pipeline_lock`, 90% cov)

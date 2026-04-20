@@ -47,14 +47,6 @@ def _ubigeo_key(row: dict[str, Any]) -> str:
     raise KeyError(f"fila sin campo ubigeo reconocido: keys={list(row.keys())}")
 
 
-def _local_key(row: dict[str, Any]) -> int:
-    for k in ("codigoLocalVotacion", "idLocalVotacion", "codigoLocal"):
-        v = row.get(k)
-        if v is not None:
-            return int(v)
-    raise KeyError(f"local sin codigo: keys={list(row.keys())}")
-
-
 async def _crawl_one_ambito(
     c: OnpeClient,
     id_eleccion: int,

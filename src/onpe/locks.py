@@ -27,7 +27,7 @@ import fcntl
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -55,15 +55,13 @@ class PipelineLock:
     """Context manager para el lock advisory del pipeline.
 
     Al adquirir escribe metadata {pid, started_iso, started_ts_ms}.
-    En salida (incluyendo excepción) libera flock y borra el archivo.
-    Si otro proceso mantiene el lock, lanza LockHeld inmediatamente (no espera).
+    En salida (incluyendo excepcion) libera flock y borra el archivo.
+    Si otro proceso mantiene el lock, lanza LockHeldError inmediatamente (no espera).
     """
 
     path: Path = DEFAULT_LOCK_PATH
     metadata: dict[str, Any] | None = None
-
-    def __post_init__(self) -> None:
-        self._fd: int | None = None
+    _fd: int | None = field(default=None, init=False, repr=False)
 
     def _existing_holder(self) -> tuple[int, str] | None:
         """Lee el metadata del lock existente si hay. None si no se puede parsear."""
@@ -75,8 +73,8 @@ class PipelineLock:
 
     def __enter__(self) -> PipelineLock:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        # O_RDWR + O_CREAT: crea el archivo si no existe; no trunca si sí existe.
-        # El truncado lo hace el write después del flock.
+        # O_RDWR + O_CREAT: crea el archivo si no existe; no trunca si si existe.
+        # El truncado lo hace el write despues del flock.
         fd = os.open(str(self.path), os.O_RDWR | os.O_CREAT, 0o644)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -87,7 +85,10 @@ class PipelineLock:
                 raise LockHeldError(pid=-1, started_iso="?", path=self.path) from None
             raise LockHeldError(pid=holder[0], started_iso=holder[1], path=self.path) from None
 
-        # Truncar + escribir metadata fresca.
+        # Asignar _fd INMEDIATAMENTE post-flock. Si os.write falla (disco lleno,
+        # EROFS), __exit__ tiene que limpiar el fd; sin esta asignacion quedaria
+        # huerfano y el flock bloquearia a procesos futuros hasta reinicio.
+        self._fd = fd
         now_ms = utc_now_ms()
         payload: dict[str, Any] = {
             "pid": os.getpid(),
@@ -99,7 +100,6 @@ class PipelineLock:
         os.ftruncate(fd, 0)
         os.write(fd, json.dumps(payload).encode("utf-8"))
         os.fsync(fd)
-        self._fd = fd
         log.info("pipeline_lock adquirido (pid=%d, archivo=%s)", os.getpid(), self.path)
         return self
 

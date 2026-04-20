@@ -93,8 +93,9 @@ def nivel1_identidades_contables() -> CheckResult:
         .filter(pl.col("codigoEstadoActa") == "C")
         .select(["idActa", "idEleccion", "totalVotosEmitidos", "totalVotosValidos"])
     )
-    # Solo evaluamos las que SÍ tienen detalle; las sin_detalle son una anomalía
-    # separada (240 actas estadoActa=N, tracked en task #38).
+    # Solo evaluamos las que SI tienen detalle; las sin_detalle son una anomalia
+    # separada (240 actas estadoActa=N = mesa_no_instalada; ver
+    # data/curated/actas_anomalia_240_investigacion.parquet).
     res = (
         cab.join(agg, on=["idActa", "idEleccion"], how="inner")
         .select(

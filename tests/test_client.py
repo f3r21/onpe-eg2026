@@ -149,3 +149,33 @@ def test_cliente_sin_inicializar_levanta_error():
     with pytest.raises(OnpeError) as exc:
         asyncio.run(call())
     assert "no inicializado" in str(exc.value) or "async with" in str(exc.value)
+
+
+def test_client_config_valida_rate_positivo():
+    """ClientConfig rechaza rate_per_second <= 0 para fallar temprano."""
+    with pytest.raises(ValueError, match="rate_per_second"):
+        ClientConfig(rate_per_second=0.0)
+    with pytest.raises(ValueError, match="rate_per_second"):
+        ClientConfig(rate_per_second=-1.0)
+
+
+def test_client_config_valida_concurrency_minimo():
+    """ClientConfig rechaza max_concurrent < 1 (Semaphore(0) bloquearia toda request)."""
+    with pytest.raises(ValueError, match="max_concurrent"):
+        ClientConfig(max_concurrent=0)
+    with pytest.raises(ValueError, match="max_concurrent"):
+        ClientConfig(max_concurrent=-5)
+
+
+def test_client_config_valida_timeout_positivo():
+    """ClientConfig rechaza timeout <= 0."""
+    with pytest.raises(ValueError, match="timeout_s"):
+        ClientConfig(timeout_s=0.0)
+
+
+def test_client_config_valores_default_ok():
+    """Los defaults no levantan error."""
+    cfg = ClientConfig()
+    assert cfg.rate_per_second > 0
+    assert cfg.max_concurrent >= 1
+    assert cfg.timeout_s > 0

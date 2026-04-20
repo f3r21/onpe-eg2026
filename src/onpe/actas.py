@@ -506,10 +506,21 @@ async def snapshot_actas(
 
     for bidx, i in enumerate(range(0, len(pending), cfg.batch)):
         batch = pending[i : i + cfg.batch]
+        # return_exceptions=True para no abortar el batch completo si una task
+        # levanta algo fuera del catch de _fetch_one (MemoryError, bug inesperado).
+        # CancelledError se re-propaga abajo para respetar asyncio.wait_for / Ctrl+C.
         results = await asyncio.gather(
-            *(_fetch_one(c, aid, im, ub, ck.run_ts_ms) for aid, im, ub, _ in batch)
+            *(_fetch_one(c, aid, im, ub, ck.run_ts_ms) for aid, im, ub, _ in batch),
+            return_exceptions=True,
         )
-        for acta_id, cab, votos, linea, archivos, err in results:
+        for item in results:
+            if isinstance(item, BaseException):
+                if isinstance(item, asyncio.CancelledError):
+                    raise item
+                log.error("excepcion inesperada en _fetch_one: %r", item)
+                stats["fallidas"] += 1
+                continue
+            acta_id, cab, votos, linea, archivos, err = item
             if err is not None:
                 ck.failed.append({"acta_id": acta_id, "error": err})
                 stats["fallidas"] += 1

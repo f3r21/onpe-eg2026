@@ -60,6 +60,17 @@ class ClientConfig:
     timeout_s: float = 30.0
     http2: bool = True
 
+    def __post_init__(self) -> None:
+        # Falla temprano antes de construir el cliente con config rota.
+        # rate=0 -> ZeroDivisionError diferida; max_concurrent=0 -> Semaphore(0)
+        # que bloquearia toda request silenciosamente.
+        if self.rate_per_second <= 0:
+            raise ValueError(f"rate_per_second debe ser > 0, se recibio {self.rate_per_second}")
+        if self.max_concurrent < 1:
+            raise ValueError(f"max_concurrent debe ser >= 1, se recibio {self.max_concurrent}")
+        if self.timeout_s <= 0:
+            raise ValueError(f"timeout_s debe ser > 0, se recibio {self.timeout_s}")
+
 
 class OnpeClient:
     """HTTP client async con concurrencia controlada y rate-limit global.
@@ -93,7 +104,8 @@ class OnpeClient:
 
     async def _throttle(self) -> None:
         async with self._rate_lock:
-            loop = asyncio.get_event_loop()
+            # get_event_loop esta deprecated dentro de coroutine desde Python 3.10.
+            loop = asyncio.get_running_loop()
             delta = loop.time() - self._last_request_at
             if delta < self._min_interval:
                 # Jitter ±10% del intervalo: suaviza el patrón temporal para
