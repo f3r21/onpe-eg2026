@@ -1,19 +1,17 @@
-"""Analytics report sobre el dataset EG2026 — consolidado.
+"""Analytics report sobre el dataset EG2026 primera vuelta — consolidado.
 
 Produce un reporte legible (text + parquet intermedios) con:
 1. Resumen ejecutivo (universo, cobertura, DQ)
-2. Top partidos por elección (Presidencial, Diputados, Senadores nac/reg, Parl Andino)
-3. Participación por departamento y distrito electoral
-4. Comparativa EG2026 vs EG2021 (si histórico ingestado)
-5. Ranking partidos por distrito electoral (DE 1-27)
-6. Stats de voto exterior (DE 27)
+2. Top partidos por eleccion (Presidencial, Diputados, Senadores nac/reg, Parl Andino)
+3. Participacion por departamento y distrito electoral
+4. Ranking partidos por distrito electoral (DE 1-27)
+5. Stats de voto exterior (DE 27)
 
 Outputs en data/analytics/:
 - report.txt — resumen ejecutivo legible
 - top_partidos_por_eleccion.parquet
 - participacion_por_depto.parquet
 - partidos_por_de.parquet
-- eg2021_vs_eg2026_participacion.parquet (si histórico)
 
 Uso:
     uv run python scripts/analytics_report.py
@@ -36,7 +34,6 @@ CURATED_CAB = DATA_DIR / "curated" / "actas_cabecera.parquet"
 CURATED_VOT = DATA_DIR / "curated" / "actas_votos.parquet"
 DIM_MESAS = DATA_DIR / "dim" / "mesas.parquet"
 DIM_DE = DATA_DIR / "dim" / "distritos_electorales.parquet"
-HISTORICO_EG2021 = DATA_DIR / "historico" / "eg2021"
 
 ELECCIONES = {
     10: "Presidencial",
@@ -204,72 +201,6 @@ def exterior_stats(cab: pl.DataFrame, vot: pl.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def comparativa_historico(cab: pl.DataFrame, outdir: Path) -> str:
-    """Compara participación EG2026 vs EG2021 por depto (si histórico disponible)."""
-    hist_file = HISTORICO_EG2021 / "eg2021_distritos_generales.parquet"
-    if not hist_file.exists():
-        return "(skipped: histórico EG2021 no ingestado)\n"
-
-    hist = pl.read_parquet(hist_file)
-    # EG2021: agrupado a nivel distrito (ubigeo), agregamos a depto
-    # Primero necesitamos saber el mapeo RENIEC ubigeo → ONPE ubigeo
-    # Los ubigeos en hist son los RENIEC (INEI-like). Los 2 primeros chars = depto.
-    eg21 = (
-        hist.with_columns(
-            pl.col("ubigeo").cast(pl.String).str.zfill(6).str.slice(0, 2).alias("depto_code")
-        )
-        .group_by("depto_code")
-        .agg(
-            pl.col("ELECTORES_HABIL").sum().alias("hab_21"),
-            pl.col("TOT_CIUDADANOS_VOTARON").sum().alias("votaron_21"),
-        )
-        .with_columns((pl.col("votaron_21") / pl.col("hab_21") * 100).alias("pct_21"))
-    )
-
-    # EG2026: de cab (Presidencial C)
-    eg26 = (
-        cab.filter((pl.col("idEleccion") == 10) & (pl.col("codigoEstadoActa") == "C"))
-        .with_columns(pl.col("ubigeoDistrito").str.slice(0, 2).alias("depto_code_onpe"))
-        .group_by("depto_code_onpe")
-        .agg(
-            pl.col("totalElectoresHabiles").sum().alias("hab_26"),
-            pl.col("totalVotosEmitidos").sum().alias("votaron_26"),
-        )
-        .with_columns((pl.col("votaron_26") / pl.col("hab_26") * 100).alias("pct_26"))
-    )
-
-    # Nota: los depto codes ONPE y RENIEC son distintos (Lima ONPE=14, RENIEC=15).
-    # La comparativa simple depto-por-depto no es directa sin mapeo.
-    # Como proxy: juntamos by pct delta sin asumir mapping.
-    out = (
-        eg21.select("depto_code", "pct_21")
-        .rename({"depto_code": "depto_reniec"})
-        .join(eg26.select("depto_code_onpe", "pct_26"), how="cross")
-        .with_columns((pl.col("pct_26") - pl.col("pct_21")).alias("delta_pct"))
-    )
-
-    out.write_parquet(
-        outdir / "eg2021_vs_eg2026_participacion_pairwise.parquet", compression="zstd"
-    )
-
-    lines = ["=" * 70, "PARTICIPACIÓN EG2026 vs EG2021 (por depto)", "=" * 70, ""]
-    lines.append("NOTA: ubigeos RENIEC (EG2021) ≠ ubigeos ONPE (EG2026) — mapeo deferred.")
-    lines.append("")
-    lines.append("Total país (agregado simple):")
-    hab21_tot = float(eg21["hab_21"].sum())
-    vot21_tot = float(eg21["votaron_21"].sum())
-    hab26_tot = float(eg26["hab_26"].sum())
-    vot26_tot = float(eg26["votaron_26"].sum())
-    lines.append(
-        f"  EG2021: {hab21_tot:>12,.0f} hábiles, {vot21_tot:>12,.0f} votaron → {vot21_tot / max(hab21_tot, 1) * 100:.2f}%"
-    )
-    lines.append(
-        f"  EG2026: {hab26_tot:>12,.0f} hábiles, {vot26_tot:>12,.0f} votaron → {vot26_tot / max(hab26_tot, 1) * 100:.2f}% (solo C, drift temporal posible)"
-    )
-    lines.append("")
-    return "\n".join(lines)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--outdir", type=str, default=str(DATA_DIR / "analytics"))
@@ -292,7 +223,6 @@ def main() -> None:
         participacion_por_depto(cab, outdir),
         partidos_por_de(vot, cab, outdir),
         exterior_stats(cab, vot),
-        comparativa_historico(cab, outdir),
     ]
 
     report = "\n".join(sections)

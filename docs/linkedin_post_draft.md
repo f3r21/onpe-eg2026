@@ -19,7 +19,7 @@ Todo extraído directamente del API reverse-engineered de ONPE, validado contra 
 • Partido del Buen Gobierno: 11.06%
 • Partido Cívico Obras: 10.17%
 
-🗳️ Participación nacional: **74.35%** en EG2026 vs 71.98% en EG2021 → **+2.37 puntos**.
+🗳️ Participación nacional EG2026 primera vuelta: **74.35%** (estado actual, pre-proclamación JNE).
 
 🌎 Voto exterior (2,543 mesas en 210 ciudades, desde Buenos Aires hasta Seúl): Renovación Popular lidera Presidencial con 55k votos.
 
@@ -44,9 +44,9 @@ Todo extraído directamente del API reverse-engineered de ONPE, validado contra 
 El código está en GitHub: **github.com/f3r21/onpe-eg2026** (MIT).
 
 Próximos pasos:
-• OCR de PDFs escaneados para extraer voto preferencial
+• Scrapers oficiales adicionales: JNE Plataforma Electoral (candidatos), RENIEC Padrón 2026
 • Cruce con datosabiertos.gob.pe cuando publique la versión oficial (~4 semanas post-proclamación)
-• Predictor electoral baseline EG2026 vs EG2021
+• OCR de PDFs escaneados para extraer voto preferencial
 
 ¿Preguntas o quieres construir algo sobre el dataset? 👇
 
