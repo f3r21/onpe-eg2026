@@ -1,27 +1,31 @@
 """Descarga y cache de GeoJSONs de ONPE SPA.
 
-La SPA Angular usa amCharts5 con geodata estática. El país completo con sus
-26 departamentos + Callao (PE-LKT es una geometry de Lago Titicaca) viene
-en un solo archivo:
+La SPA Angular usa amCharts5 con geodata estática. Hay 3 niveles de detalle:
 
-    /assets/lib/amcharts5/geodata/json/peruLow.json  (~38 KB, FeatureCollection)
+1. País completo (`peruLow.json`, ~38 KB, FeatureCollection con 26 deptos + Callao)
+2. Departamento individual (`departamentos/{ubigeo}.json`, una FeatureCollection
+   con polígonos de las provincias del departamento)
+3. Provincia individual (`provincias/{ubigeo}.json`, FeatureCollection con
+   polígonos de los distritos de esa provincia)
 
-Cada feature tiene:
-- id: ubigeoDepartamento ONPE (ej. '140000' para Lima, '240000' para Callao)
-- properties.name: nombre legible
-- properties.id: código ISO (ej. 'PE-AMA')
-- geometry: Polygon / MultiPolygon
+Descubierto empíricamente 2026-04-19 via DevTools capturing de navegación por
+mapa del SPA (/main/actas).
 
-NO se encontraron GeoJSONs separados por departamento ni por provincia en la
-SPA pública. Para provincias/distritos se recomienda INEI o OpenStreetMap
-en una task posterior.
+Paths:
+    /assets/lib/amcharts5/geodata/json/peruLow.json
+    /assets/lib/amcharts5/geodata/json/departamentos/{ubigeoDepartamento}.json
+    /assets/lib/amcharts5/geodata/json/provincias/{ubigeoProvincia}.json
+
+Cada feature tiene id=ubigeo, properties.name, geometry (Polygon/MultiPolygon).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
+from typing import Iterable
 
 import httpx
 
@@ -29,6 +33,8 @@ log = logging.getLogger(__name__)
 
 BASE_URL = "https://resultadoelectoral.onpe.gob.pe"
 PERU_LOW_PATH = "/assets/lib/amcharts5/geodata/json/peruLow.json"
+DEPTO_PATH_TMPL = "/assets/lib/amcharts5/geodata/json/departamentos/{ubigeo}.json"
+PROV_PATH_TMPL = "/assets/lib/amcharts5/geodata/json/provincias/{ubigeo}.json"
 
 # Headers requeridos por CloudFront. Sin el Referer correcto devuelve el index.html
 # del SPA (content-type text/html) en lugar del JSON.
@@ -94,3 +100,87 @@ def load_peru_low(path: Path) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"{path} no existe. Correr download_peru_low() antes.")
     return json.loads(path.read_text())
+
+
+def _download_single_geojson(
+    client: httpx.Client,
+    url: str,
+    dst: Path,
+    force: bool = False,
+) -> bool:
+    """Descarga y valida un GeoJSON individual. Devuelve True si se descargó/existía OK."""
+    if dst.exists() and not force:
+        return True
+    r = client.get(url)
+    if r.status_code != 200:
+        log.warning("skip %s: status=%d", url, r.status_code)
+        return False
+    ct = r.headers.get("content-type", "")
+    if "application/json" not in ct:
+        log.warning("skip %s: content-type=%s (no es JSON)", url, ct[:30])
+        return False
+    data = r.json()
+    if data.get("type") not in ("FeatureCollection", "Feature", "GeometryCollection"):
+        log.warning("skip %s: type=%r no es GeoJSON válido", url, data.get("type"))
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False))
+    tmp.replace(dst)
+    return True
+
+
+def download_departamentos(
+    dst_dir: Path,
+    ubigeos: Iterable[str],
+    rate_sleep: float = 0.3,
+    force: bool = False,
+) -> dict[str, bool]:
+    """Descarga GeoJSONs de todos los ubigeos de departamento.
+
+    Args:
+        dst_dir: directorio destino (ej. data/geojson/departamentos/)
+        ubigeos: lista de ubigeos de departamento ("010000", "020000", ...)
+        rate_sleep: delay entre requests (respeta CloudFront)
+        force: re-descargar aunque exista.
+
+    Returns:
+        dict {ubigeo: success_bool}
+    """
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    results: dict[str, bool] = {}
+    with httpx.Client(timeout=30, headers=DEFAULT_HEADERS) as client:
+        for ubigeo in ubigeos:
+            url = f"{BASE_URL}{DEPTO_PATH_TMPL.format(ubigeo=ubigeo)}"
+            dst = dst_dir / f"{ubigeo}.json"
+            ok = _download_single_geojson(client, url, dst, force=force)
+            results[ubigeo] = ok
+            log.info("depto %s: %s", ubigeo, "OK" if ok else "SKIP")
+            time.sleep(rate_sleep)
+    return results
+
+
+def download_provincias(
+    dst_dir: Path,
+    ubigeos: Iterable[str],
+    rate_sleep: float = 0.3,
+    force: bool = False,
+) -> dict[str, bool]:
+    """Descarga GeoJSONs de todos los ubigeos de provincia.
+
+    Args:
+        dst_dir: directorio destino (ej. data/geojson/provincias/)
+        ubigeos: lista ubigeos provincia ("010100", "040100", ...)
+        rate_sleep: delay entre requests
+        force: re-descargar aunque exista.
+    """
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    results: dict[str, bool] = {}
+    with httpx.Client(timeout=30, headers=DEFAULT_HEADERS) as client:
+        for ubigeo in ubigeos:
+            url = f"{BASE_URL}{PROV_PATH_TMPL.format(ubigeo=ubigeo)}"
+            dst = dst_dir / f"{ubigeo}.json"
+            ok = _download_single_geojson(client, url, dst, force=force)
+            results[ubigeo] = ok
+            time.sleep(rate_sleep)
+    return results
