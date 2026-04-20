@@ -496,13 +496,70 @@ def run_nivel3() -> list[CheckResult]:
     ]
 
 
+# ---- Nivel 4 (cruce contra datosabiertos oficial post-proclamación) -------
+
+
+def nivel4_datasource_disponible() -> CheckResult:
+    """Pre-check: existe el parquet de datosabiertos EG2026?
+
+    Si no existe (ONPE aún no publicó en datosabiertos, ~2-4 sem post-JNE),
+    todos los checks Nivel 4 se skippean con mensaje informativo.
+    """
+    oficiales = sorted(
+        (CAB.parent).glob("datosabiertos_eg2026_*.parquet")
+    )
+    ok = len(oficiales) > 0
+    detail = (
+        f"datasets oficiales: {[p.name for p in oficiales]}"
+        if ok
+        else "PENDING — ONPE aún no publicó en datosabiertos.gob.pe. "
+        "Correr `scripts/monitor_datosabiertos.py` semanalmente."
+    )
+    return CheckResult("datosabiertos EG2026 disponible", ok, detail)
+
+
+def nivel4_reconciliacion_votos_por_partido() -> CheckResult:
+    """Reconcilia votos por (partido × distrito × elección) — curated vs oficial.
+
+    PENDING hasta que ONPE publique EG2026 en datosabiertos. El skeleton
+    espera columnas tipo: UBIGEO, PARTIDO/CANDIDATO_ID, VOTOS_PARTIDO.
+    El mapping exacto se confirma post-publicación.
+    """
+    oficiales = sorted(
+        (CAB.parent).glob("datosabiertos_eg2026_*.parquet")
+    )
+    if not oficiales:
+        return CheckResult(
+            "reconciliación votos por partido × distrito × elección",
+            False,
+            "SKIPPED — no hay parquet oficial aún",
+        )
+    # TODO: cuando haya data real, implementar:
+    # - join curated actas_votos agregado por (idEleccion × idDistritoElectoral × partido)
+    # - vs oficial datosabiertos agregado mismas dimensiones
+    # - delta ≤ 1 voto por grupo
+    return CheckResult(
+        "reconciliación votos (skeleton)",
+        False,
+        f"TODO — implementar cuando schema oficial esté disponible. "
+        f"Encontrados: {len(oficiales)} parquet(s)",
+    )
+
+
+def run_nivel4() -> list[CheckResult]:
+    return [
+        nivel4_datasource_disponible(),
+        nivel4_reconciliacion_votos_por_partido(),
+    ]
+
+
 # ---- Main -----------------------------------------------------------------
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--nivel", type=int, choices=[1, 2, 3, 0], default=0,
-                        help="1 | 2 | 3 = solo un nivel; 0 = todos los niveles disponibles (default)")
+    parser.add_argument("--nivel", type=int, choices=[1, 2, 3, 4, 0], default=0,
+                        help="1 | 2 | 3 | 4 = solo un nivel; 0 = todos los niveles disponibles (default)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -517,6 +574,9 @@ def main() -> int:
     if args.nivel in (0, 3):
         for r in run_nivel3():
             results.append((3, r))
+    if args.nivel in (0, 4):
+        for r in run_nivel4():
+            results.append((4, r))
 
     log.info("\n%-6s %-6s %-40s %s", "NIVEL", "RES", "CHECK", "DETALLE")
     log.info("-" * 100)
