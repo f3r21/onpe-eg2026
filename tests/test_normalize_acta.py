@@ -11,7 +11,7 @@ def test_normalize_mesa_inexistente_devuelve_none(
     acta_inexistente: dict[str, Any], snapshot_ts_ms: int
 ):
     """codigoMesa=None → (None, [], [], []); no contamina el pipeline."""
-    cab, votos, linea, archivos = normalize_acta(
+    cab, votos, linea, archivos, _candidatos = normalize_acta(
         acta_inexistente,
         acta_id_fallback=123,
         id_mesa_fallback=1,
@@ -26,7 +26,7 @@ def test_normalize_mesa_inexistente_devuelve_none(
 
 def test_normalize_acta_c_cabecera_campos_criticos(acta_c: dict[str, Any], snapshot_ts_ms: int):
     """Acta C contabilizada: cabecera tiene id, codigoMesa, totales, estado."""
-    cab, _, _, _ = normalize_acta(
+    cab, _, _, _, _ = normalize_acta(
         acta_c,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
@@ -47,7 +47,7 @@ def test_normalize_acta_c_cabecera_campos_criticos(acta_c: dict[str, Any], snaps
 
 def test_normalize_acta_c_votos_tienen_41_filas(acta_c: dict[str, Any], snapshot_ts_ms: int):
     """Acta C Presidencial debe producir 41 filas de detalle (38 partidos + 3 especiales)."""
-    _, votos, _, _ = normalize_acta(
+    _, votos, _, _, _ = normalize_acta(
         acta_c,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
@@ -59,7 +59,7 @@ def test_normalize_acta_c_votos_tienen_41_filas(acta_c: dict[str, Any], snapshot
 
 def test_normalize_especiales_flag(acta_c: dict[str, Any], snapshot_ts_ms: int):
     """'VOTOS EN BLANCO/NULOS/IMPUGNADOS' tienen es_especial=True, resto False."""
-    _, votos, _, _ = normalize_acta(
+    _, votos, _, _, _ = normalize_acta(
         acta_c,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
@@ -79,7 +79,7 @@ def test_normalize_especiales_flag(acta_c: dict[str, Any], snapshot_ts_ms: int):
 
 def test_normalize_candidato_extraction(acta_c: dict[str, Any], snapshot_ts_ms: int):
     """Primer candidato del array se expande a cand_* fields."""
-    _, votos, _, _ = normalize_acta(
+    _, votos, _, _, _ = normalize_acta(
         acta_c,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
@@ -96,7 +96,7 @@ def test_normalize_candidato_extraction(acta_c: dict[str, Any], snapshot_ts_ms: 
 
 def test_normalize_acta_p_sin_detalle(acta_p: dict[str, Any], snapshot_ts_ms: int):
     """Acta P pendiente: cabecera OK, votos vacíos, linea_tiempo vacía."""
-    cab, votos, linea, _archivos = normalize_acta(
+    cab, votos, linea, _archivos, _candidatos = normalize_acta(
         acta_p,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
@@ -114,7 +114,7 @@ def test_normalize_acta_e_tiene_detalle_pero_totales_null(
     acta_e: dict[str, Any], snapshot_ts_ms: int
 ):
     """Acta E: detalle poblado, totales de cabecera null."""
-    cab, votos, _, _ = normalize_acta(
+    cab, votos, _, _, _ = normalize_acta(
         acta_e,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
@@ -130,7 +130,7 @@ def test_normalize_acta_e_tiene_detalle_pero_totales_null(
 def test_normalize_fallback_id_cuando_data_id_none(acta_c: dict[str, Any], snapshot_ts_ms: int):
     """Si data['id'] es None, usa acta_id_fallback."""
     acta_c["id"] = None
-    cab, _, _, _ = normalize_acta(
+    cab, _, _, _, _ = normalize_acta(
         acta_c,
         acta_id_fallback=999999,
         id_mesa_fallback=5507,
@@ -156,7 +156,7 @@ def test_normalize_linea_tiempo_con_evento_idx(acta_c: dict[str, Any], snapshot_
             "fechaRegistro": 1744100000000,
         },
     ]
-    _, _, linea, _ = normalize_acta(
+    _, _, linea, _, _ = normalize_acta(
         acta_c,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
@@ -180,7 +180,7 @@ def test_normalize_archivos_preserva_archivoId(acta_c: dict[str, Any], snapshot_
             "daudFechaCreacion": 1744000000000,
         },
     ]
-    _, _, _, archivos = normalize_acta(
+    _, _, _, archivos, _ = normalize_acta(
         acta_c,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
@@ -203,7 +203,7 @@ def test_normalize_ubigeo_distrito_en_todas_las_filas_hijas(
     acta_c["lineaTiempo"] = [
         {"codigoEstadoActa": "C", "descripcionEstadoActa": "x", "fechaRegistro": 0}
     ]
-    _, votos, linea, archivos = normalize_acta(
+    _, votos, linea, archivos, _ = normalize_acta(
         acta_c,
         acta_id_fallback=550704010210,
         id_mesa_fallback=5507,
