@@ -27,6 +27,9 @@ data/*
 !data/registry/
 !data/registry/**
 
+# Packages de release generados por scripts/prepare_release.py (se suben a Zenodo/Kaggle/HF, no a git).
+datasets/
+
 # Logs y corridas
 *.log
 logs/

@@ -61,6 +61,8 @@ scripts/
   crawl_resoluciones.py           # scraper El Peruano resoluciones EG2026 → data/dim/resoluciones.parquet + PDFs
   export_csv.py                   # exporter CSV con filtros (eleccion/DE/depto/partido) — periodistas/analistas
   detect_anomalies.py             # detector baseline 7 reglas → data/analytics/anomalias.parquet + resumen .md/.json
+  prepare_release.py              # empaqueta datasets/<version>/ (parquet+csv+sqlite+geojson+docs+notebooks+CHECKSUMS)
+  generate_cover.py               # render docs/cover.png 1200x600 para cards Kaggle/Zenodo/HF
   dq_check.py                     # DQ Nivel 1 + 2 + 3 (--nivel 1|2|3|0)
   smoke.py                        # end-to-end validation — golden path del API
   dashboard.py                    # HTML estático salud del pipeline → data/dashboard/index.html
@@ -268,6 +270,12 @@ Estado al 2026-04-20:
 - `scripts/build_curated.py` extendido: genera `data/curated/actas_votos_tidy.parquet` (18.6M filas × 17 cols consumer-friendly) como paso final automático post-enrich.
 - `scripts/detect_anomalies.py`: detector baseline con 7 reglas (3 CRITICAL + 2 HIGH + 2 MEDIUM). Cross-check contra padrón RENIEC. Baseline dataset 2026-04-20: **0 CRITICAL, 0 HIGH, 4,600 MEDIUM** (outliers estadísticos, DQ total sano).
 - 20 tests nuevos. Full suite 142/142 PASS.
+
+**Completado 2026-04-20 (PR #9)**:
+- `scripts/prepare_release.py`: empaqueta `datasets/<version>/` con `parquet/` (14 archivos 158 MB) + `csv/` (5 archivos útiles 131 MB) + `sqlite/onpe_eg2026.db` (5 tablas 128 MB, sin `actas_votos_tidy` por default para mantener tamaño) + `geojson/` (222 archivos 23 MB) + `docs/` + `notebooks/` + `CHECKSUMS.txt` + `README.md`. Total ~441 MB, dentro de límites Kaggle/Zenodo/HF.
+- `scripts/generate_cover.py`: render `docs/cover.png` 1200×600 matplotlib.
+- 5 notebooks demo: getting-started, participación, resultados presidencial, voto exterior, anomaly detection.
+- 6 tests nuevos. Full suite 174/174 PASS.
 
 **Deferred (fuera de scope del 100%)**:
 - A0 daemon formal aggregate_loop.py (shim actual cumple SLI)

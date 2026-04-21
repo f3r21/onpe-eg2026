@@ -119,7 +119,8 @@ uv run python scripts/daily_refresh.py --all --rps 15
 | 7 | `download_geojsons.py` | `data/geojson/peruLow.json` | ~5s |
 | 8 | `dashboard.py` | `data/dashboard/index.html` | ~10s |
 | 9 | `crawl_reniec_padron.py` | `data/dim/padron.parquet` (27.23M electores × distrito) | ~30s |
-| 10 | `detect_anomalies.py` | `data/analytics/anomalias.{parquet,md,json}` | ~5s |
+| 10 | `crawl_resoluciones.py` | `data/dim/resoluciones.parquet` + PDFs landmark EG2026 | ~30s |
+| 11 | `detect_anomalies.py` | `data/analytics/anomalias.{parquet,md,json}` | ~5s |
 
 ### Exportación y consumo
 
@@ -127,6 +128,8 @@ uv run python scripts/daily_refresh.py --all --rps 15
 |---|---|
 | `export_csv.py` | CSV con filtros (`--eleccion/--de/--depto/--partido/...`) en 3 formatos: `mesa-partido` (long), `resumen-distrito` (agregado), `cabecera` (compacto). Soporta `--compression gzip`. |
 | `actas_votos_tidy.parquet` | Vista long-format consumer-friendly generada automáticamente por `build_curated.py` (18.6M filas enriquecidas con contexto geográfico). |
+| `prepare_release.py` | Empaqueta `datasets/<version>/` (parquet + csv + sqlite + geojson + docs + notebooks + CHECKSUMS.txt) listo para Zenodo/Kaggle/HF. |
+| `generate_cover.py` | Renderiza `docs/cover.png` 1200×600 para cards de release. |
 
 ## Niveles de DQ (Data Quality)
 
