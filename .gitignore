@@ -21,7 +21,11 @@ service-account*.json
 credentials/
 
 # Datos crudos (outputs del ingestor — muy grandes, regenerables)
-data/
+data/*
+
+# Excepción: los registries curados (YAML/JSON manualmente mantenidos) sí van al repo.
+!data/registry/
+!data/registry/**
 
 # Logs y corridas
 *.log

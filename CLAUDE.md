@@ -58,6 +58,7 @@ scripts/
   build_curated.py                # dedup max(run_ts_ms), streaming sink_parquet, auto-enrich (--no-enrich opt), genera actas_votos_tidy.parquet
   enrich_curated.py               # join con dim/mesas → idAmbitoGeografico + idDistritoElectoral
   crawl_reniec_padron.py          # scraper RENIEC padrón Q1 2026 → data/dim/padron.parquet
+  crawl_resoluciones.py           # scraper El Peruano resoluciones EG2026 → data/dim/resoluciones.parquet + PDFs
   export_csv.py                   # exporter CSV con filtros (eleccion/DE/depto/partido) — periodistas/analistas
   detect_anomalies.py             # detector baseline 7 reglas → data/analytics/anomalias.parquet + resumen .md/.json
   dq_check.py                     # DQ Nivel 1 + 2 + 3 (--nivel 1|2|3|0)
@@ -257,6 +258,10 @@ Estado al 2026-04-20:
 **Completado 2026-04-20 (PR #6)**:
 - Padrón RENIEC integrado via datosabiertos.gob.pe. `src/onpe/reniec_padron.py` + `scripts/crawl_reniec_padron.py` + 12 tests. Output `data/dim/padron.parquet` (2,039 filas, 27.23M electores Q1 2026 delta 0.46% vs oficial JNE). Columnas: ubigeo_reniec/inei, demografía (sexo, rangos etarios), DNI vigencia.
 - **Finding ubigeo**: ONPE.ubigeoDistrito ≡ RENIEC.UBIGEO_RENIEC (100% match). Quien diverge es INEI. Join ONPE ↔ RENIEC es directo vía `ubigeoDistrito ↔ ubigeo_reniec`. Corrige la suposición previa que agrupaba ONPE con INEI/RENIEC.
+
+**Completado 2026-04-20 (PR #7)**:
+- El Peruano resoluciones integrado vía `busquedas.elperuano.pe/dispositivo/NL/{op}`. `src/onpe/resoluciones.py` + `scripts/crawl_resoluciones.py` + `data/registry/resoluciones_eg2026.yaml` (7 landmarks: cronograma, reglamentos primarias, padrón, voto digital, miembros mesa exterior) + 26 tests. Output `data/dim/resoluciones.parquet` + PDFs descargados. **GraphQL paginado roto server-side** (error `'hits'`), usamos páginas detalle con `__NEXT_DATA__`. Registry expandible — agregar op IDs al YAML y re-correr.
+- ONPE POE: deferred (sitio `www.onpe.gob.pe/elecciones-generales-2026/` retorna 403 a scrapers plano).
 
 **Completado 2026-04-20 (PR #8)**:
 - `scripts/export_csv.py`: exporter CSV con filtros (eleccion/DE/depto/provincia/distrito/partido/ambito/estado). 3 formatos: `mesa-partido` (long), `resumen-distrito` (agregado), `cabecera` (compacto). Soporta gzip.

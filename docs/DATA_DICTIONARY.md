@@ -232,6 +232,26 @@ padron = pl.read_parquet("data/dim/padron.parquet")
 cobertura = actas.join(padron, left_on="ubigeoDistrito", right_on="ubigeo_reniec", how="left")
 ```
 
+### `dim/resoluciones.parquet` (registry curado EG2026)
+
+Registro estructurado de resoluciones oficiales landmark del proceso EG2026 (cronograma, reglamentos primarias, padrón, voto digital, miembros de mesa exterior). Fuente: Diario Oficial El Peruano — páginas `busquedas.elperuano.pe/dispositivo/NL/{op}`. PDFs descargados a `data/raw/resoluciones/{op}.pdf`. Editable en `data/registry/resoluciones_eg2026.yaml`: añadir el `op` del buscador El Peruano + tags curados y correr `scripts/crawl_resoluciones.py` para hidratar metadata en vivo.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `op_id` | String | ID del dispositivo en El Peruano (ej. `"2388220-1"`). PK. |
+| `fecha_publicacion` | String | ISO `YYYY-MM-DD` (normalizado desde `YYYYMMDD` del API). |
+| `institucion` | String | `JNE`, `ONPE`, `RENIEC`, `JEE`, …. Campo directo del API o inferido del `nombreDispositivo`. |
+| `tipo_dispositivo` | String | `RESOLUCION`, `RESOLUCION JEFATURAL`, …. |
+| `nombre_dispositivo` | String | Ej. `"N° 0126-2025-JNE"` o `"N° 000063-2025-JN/ONPE"`. |
+| `sumilla` | String | Descripción corta (título oficial del documento). |
+| `url_html` | String | URL a la página de detalle en `busquedas.elperuano.pe`. |
+| `url_pdf` | String | URL directa del PDF oficial. |
+| `sector`, `rubro` | String (nullable) | Categorización interna de El Peruano. |
+| `tag_proceso` | String | Etiqueta curada: `EG2026`, `EG2026_PRIMARIAS`, `EG2026_EXTERIOR`. |
+| `tag_categoria` | String | Etiqueta curada: `cronograma`, `padron`, `reglamento_primarias`, `voto_digital`, `miembros_mesa`, `observacion`, `cedula`. |
+| `url_ok` | Boolean | True si el scraper pudo hidratar metadata en vivo. False → data del YAML fallback. |
+| `notas` | String | Notas del curador explicando relevancia de la resolución. |
+
 ---
 
 ## GeoJSONs (`geojson/`)
