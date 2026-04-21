@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import logging
+import re
 import shutil
 import sqlite3
 import sys
@@ -52,6 +53,12 @@ CURATED_TABLES = (
     "actas_linea_tiempo",
     "actas_archivos",
 )
+
+# Tablas cuya ausencia aborta el release — el dataset sin ellas no es publicable.
+# El resto (candidatos, linea_tiempo, archivos, tidy) puede estar ausente en un
+# snapshot parcial sin invalidar la coherencia del release.
+REQUIRED_CURATED = frozenset({"actas_cabecera", "actas_votos"})
+REQUIRED_DIM = frozenset({"mesas", "distritos_electorales"})
 
 # Tablas dim que van en el release.
 DIM_TABLES = (
@@ -102,16 +109,29 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def copy_parquet(plan: ReleasePlan) -> list[Path]:
-    """Copia las tablas parquet curated + dim + analytics."""
+def copy_parquet(plan: ReleasePlan) -> tuple[list[Path], list[str]]:
+    """Copia las tablas parquet curated + dim + analytics.
+
+    Retorna (archivos_copiados, faltantes_requeridos). Si `faltantes_requeridos`
+    es no-vacío, `main()` aborta con exit != 0 para que un release incompleto
+    NUNCA se publique silenciosamente.
+    """
     dest = plan.out_dir / "parquet"
     dest.mkdir(parents=True, exist_ok=True)
     copied: list[Path] = []
+    missing_required: list[str] = []
 
     for name in CURATED_TABLES:
         src = DATA_DIR / "curated" / f"{name}.parquet"
         if not src.exists():
-            log.warning("curated/%s.parquet no existe — skip", name)
+            if name in REQUIRED_CURATED:
+                log.error(
+                    "tabla REQUERIDA curated/%s.parquet no existe — release INCOMPLETO",
+                    name,
+                )
+                missing_required.append(f"curated/{name}.parquet")
+            else:
+                log.warning("curated/%s.parquet no existe — skip (opcional)", name)
             continue
         dst = dest / f"{name}.parquet"
         shutil.copy2(src, dst)
@@ -121,7 +141,11 @@ def copy_parquet(plan: ReleasePlan) -> list[Path]:
     for name in DIM_TABLES:
         src = DATA_DIR / "dim" / f"{name}.parquet"
         if not src.exists():
-            log.warning("dim/%s.parquet no existe — skip", name)
+            if name in REQUIRED_DIM:
+                log.error("dim REQUERIDO %s.parquet no existe — release INCOMPLETO", name)
+                missing_required.append(f"dim/{name}.parquet")
+            else:
+                log.warning("dim/%s.parquet no existe — skip (opcional)", name)
             continue
         dst = dest / f"dim_{name}.parquet"
         shutil.copy2(src, dst)
@@ -131,14 +155,17 @@ def copy_parquet(plan: ReleasePlan) -> list[Path]:
     for name in ANALYTICS_TABLES:
         src = DATA_DIR / "analytics" / f"{name}.parquet"
         if not src.exists():
-            log.info("analytics/%s.parquet no existe — skip", name)
+            log.warning(
+                "analytics/%s.parquet no existe — skip (correr detect_anomalies.py)",
+                name,
+            )
             continue
         dst = dest / f"analytics_{name}.parquet"
         shutil.copy2(src, dst)
         copied.append(dst)
         log.info("parquet analytics/%s.parquet -> %s", name, dst)
 
-    return copied
+    return copied, missing_required
 
 
 def export_csv(plan: ReleasePlan) -> list[Path]:
@@ -268,20 +295,44 @@ def export_sqlite(plan: ReleasePlan) -> list[Path]:
                 log.warning("skip sqlite tabla %s: fuente no existe", tbl)
                 continue
             df = pl.read_parquet(path)
-            # Polars.to_pandas requiere pandas; usamos write_database_raw path via sqlite3 bulk insert.
             _bulk_insert(con, tbl, df)
+            # Verificar integridad post-inserción — si Polars tenía un tipo que
+            # sqlite3 no aceptó (p.ej. List), executemany puede haber saltado filas.
+            actual = con.execute(f'SELECT COUNT(*) FROM "{tbl}"').fetchone()[0]
+            if actual != df.shape[0]:
+                raise RuntimeError(
+                    f"inserción SQLite incompleta en {tbl}: "
+                    f"esperaba {df.shape[0]} filas, actual {actual}"
+                )
             log.info("sqlite %s: %d filas insertadas", tbl, df.shape[0])
-    finally:
+        # Commit dentro del try — si algo falla antes, no dejamos state parcial.
         con.commit()
+    finally:
         con.close()
 
     log.info("sqlite escrito %s (%.1f MB)", db_path, db_path.stat().st_size / 1e6)
     return [db_path]
 
 
+_SQL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _safe_sql_ident(name: str) -> str:
+    """Valida que `name` sea un identificador SQL seguro para interpolación directa.
+
+    Aunque los nombres vienen de dicts hardcoded + Polars schema (no user input),
+    la interpolación string-based de identificadores es anti-pattern. Validar y
+    fallar temprano es más seguro que confiar en que nunca llegue un caracter raro.
+    """
+    if not _SQL_IDENT_RE.match(name):
+        raise ValueError(f"identificador SQL inseguro: {name!r}")
+    return name
+
+
 def _bulk_insert(con: sqlite3.Connection, tbl: str, df: pl.DataFrame) -> None:
     """Inserta un DataFrame de Polars en SQLite sin pasar por pandas."""
-    cols = df.columns
+    tbl = _safe_sql_ident(tbl)
+    cols = [_safe_sql_ident(c) for c in df.columns]
     cols_sql = ", ".join(f'"{c}"' for c in cols)
     placeholders = ", ".join("?" for _ in cols)
     con.execute(f'CREATE TABLE "{tbl}" ({", ".join(f""" "{c}" """ for c in cols)})')
@@ -378,11 +429,15 @@ El Peruano resoluciones, GeoJSONs ONPE).
 ```python
 import polars as pl
 
-# Totales por partido en Presidencial
-votos = pl.read_parquet("parquet/actas_votos_tidy.parquet")
-votos.filter(pl.col("idEleccion") == 10).group_by("partido").agg(
-    pl.col("nvotos").sum()
-).sort("nvotos", descending=True)
+# Totales por partido en Presidencial (lazy + streaming: 1.8 GB sin romper RAM).
+votos = pl.scan_parquet("parquet/actas_votos_tidy.parquet")
+(
+    votos.filter(pl.col("idEleccion") == 10)
+    .group_by("partido")
+    .agg(pl.col("nvotos").sum())
+    .sort("nvotos", descending=True)
+    .collect()
+)
 ```
 
 ## Licencias
@@ -442,7 +497,7 @@ def summarize(plan: ReleasePlan, artifacts: list[Path]) -> dict:
     }
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", default="v1.0", help="versión del release (default v1.0)")
     parser.add_argument(
@@ -480,12 +535,14 @@ def main() -> None:
     if args.dry_run:
         print(f"[DRY-RUN] empaquetaría {plan.version} en {plan.out_dir}")
         print(f"[DRY-RUN] curated: {CURATED_TABLES}")
+        print(f"[DRY-RUN] required curated: {sorted(REQUIRED_CURATED)}")
         print(f"[DRY-RUN] dim: {DIM_TABLES}")
+        print(f"[DRY-RUN] required dim: {sorted(REQUIRED_DIM)}")
         print(f"[DRY-RUN] analytics: {ANALYTICS_TABLES}")
         print(
             f"[DRY-RUN] skip-csv={plan.skip_csv} skip-sqlite={plan.skip_sqlite} skip-geojson={plan.skip_geojson}"
         )
-        return
+        return 0
 
     if plan.out_dir.exists():
         log.warning("limpiando directorio existente: %s", plan.out_dir)
@@ -493,7 +550,16 @@ def main() -> None:
     plan.out_dir.mkdir(parents=True)
 
     artifacts: list[Path] = []
-    artifacts.extend(copy_parquet(plan))
+    parquet_copied, missing_required = copy_parquet(plan)
+    artifacts.extend(parquet_copied)
+    if missing_required:
+        log.error(
+            "release ABORTADO — %d tabla(s) REQUERIDA(s) ausente(s): %s. "
+            "Correr snapshot_actas.py + build_curated.py antes del release.",
+            len(missing_required),
+            ", ".join(missing_required),
+        )
+        return 2
     artifacts.extend(export_csv(plan))
     artifacts.extend(export_sqlite(plan))
     artifacts.extend(copy_geojson(plan))
@@ -514,7 +580,8 @@ def main() -> None:
     print("  por directorio :")
     for dirname, info in sorted(summary["by_dir"].items()):
         print(f"    {dirname:12s}: {info['files']:>3} archivos, {info['bytes'] / 1e6:>7.1f} MB")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

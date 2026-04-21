@@ -50,7 +50,7 @@ Columnas: `ubigeo_reniec`, `ubigeo_inei`, `residencia`, `pais_codigo`, `pais_nom
 
 ## 6. PDFs binarios: opcionales, no parte del dataset curated
 
-Los 811,984 PDFs escaneados están en un bucket GCS (`gs://onpe-eg2026-pdfs-v2/eg2026/`). **NO se publican** como parte del dataset v1.0 porque:
+Los 811,984 PDFs escaneados están en un bucket GCS privado del mantenedor (accesible sólo con credenciales propias vía `scripts/download_pdfs.py --gcs-bucket`). **NO se publican** como parte del dataset v1.0 porque:
 - Volumen de ~1 TB excede límites de Kaggle y es pesado para Zenodo.
 - La metadata (`archivoId`, tipo, fechas) SÍ está en `actas_archivos.parquet` para que consumers los descarguen bajo demanda via `scripts/download_pdfs.py`.
 

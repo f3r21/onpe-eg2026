@@ -324,9 +324,21 @@ def run_all(eleccion: int | None, min_severity: str) -> pl.DataFrame:
 
     padron_path = DIM_DIR / "padron.parquet"
     if padron_path.exists() and eleccion in (None, 10):
-        log.info("padron RENIEC disponible — corriendo emitidos_gt_padron_reniec")
-        padron_df = pl.read_parquet(padron_path)
-        detectors.append(detect_emitidos_gt_padron(cab, padron_df))
+        # Pre-check: si el curated no tiene idAmbitoGeografico (build_curated --no-enrich),
+        # el detector fallaría con ColumnNotFoundError abortando TODO run_all sin
+        # guardar los detectores 1-6. Detectar antes y saltar graciosamente.
+        cab_cols = set(
+            pl.scan_parquet(CURATED_DIR / "actas_cabecera.parquet").collect_schema().names()
+        )
+        if "idAmbitoGeografico" not in cab_cols:
+            log.warning(
+                "curated sin idAmbitoGeografico — skip emitidos_gt_padron_reniec. "
+                "Correr build_curated.py sin --no-enrich para habilitar este detector."
+            )
+        else:
+            log.info("padron RENIEC disponible — corriendo emitidos_gt_padron_reniec")
+            padron_df = pl.read_parquet(padron_path)
+            detectors.append(detect_emitidos_gt_padron(cab, padron_df))
     else:
         log.info("padron RENIEC no disponible, skip detector de padrón")
 

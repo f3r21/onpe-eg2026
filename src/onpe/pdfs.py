@@ -305,4 +305,7 @@ async def download_pdf_to_gcs(
                     object_name,
                 )
                 return DownloadResult(archivo_id, dst_path, size, "skipped_existing")
+        # Log en tiempo real — el checkpoint JSON guarda el error pero el operador
+        # que monitorea stdout debe ver fallos masivos (p.ej. GCS IAM revocado).
+        log.error("fallo GCS archivo_id=%s (%s): %s", archivo_id, name, e)
         return DownloadResult(archivo_id, dst_path, 0, "failed", error=str(e))

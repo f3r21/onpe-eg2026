@@ -40,7 +40,7 @@ Ejemplo distribucion 3 workers:
 5. Corre `uv sync` (instala deps Python).
 6. Copia la credencial a `credentials/` dentro del repo.
 7. Setea `GOOGLE_APPLICATION_CREDENTIALS` permanente (`setx`).
-8. Descarga los 2 parquets de curated desde `gs://onpe-eg2026-pdfs-v2/bootstrap/curated/`.
+8. Descarga los 2 parquets de curated desde `gs://<TU_BUCKET>/bootstrap/curated/` (el bucket lo define `GCS_BUCKET_NAME` en el bat o se pide interactivamente).
 9. Desactiva suspend/hibernate/monitor-off mientras corre.
 10. Lanza `download_pdfs.py` con `--shard M/N`.
 
@@ -82,9 +82,8 @@ rmdir /S /Q "%USERPROFILE%\onpe-eg2026"
 Ademas, el admin del proyecto debe **revocar** la service account key cuando ya no sea necesaria:
 
 ```bash
-gcloud iam service-accounts keys list \
-  --iam-account=pdfs-uploader@onpe-eg2026-v2.iam.gserviceaccount.com
+# Reemplazar <SA_EMAIL> por tu pdfs-uploader@<TU_PROYECTO>.iam.gserviceaccount.com
+gcloud iam service-accounts keys list --iam-account=<SA_EMAIL>
 
-gcloud iam service-accounts keys delete <KEY_ID> \
-  --iam-account=pdfs-uploader@onpe-eg2026-v2.iam.gserviceaccount.com
+gcloud iam service-accounts keys delete <KEY_ID> --iam-account=<SA_EMAIL>
 ```

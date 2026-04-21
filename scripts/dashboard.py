@@ -57,7 +57,10 @@ def _max_ts_ms(path: Path) -> int | None:
         return 0
     try:
         return pl.scan_parquet(path).select(pl.col("snapshot_ts_ms").max()).collect().item()
-    except Exception:
+    except Exception as e:
+        # Parquet corrupto, schema inesperado o permiso denegado. El dashboard
+        # tolera None (mostrará drift vacío), pero el operador debe enterarse.
+        log.warning("no se pudo leer snapshot_ts_ms de %s: %s", path, e)
         return None
 
 

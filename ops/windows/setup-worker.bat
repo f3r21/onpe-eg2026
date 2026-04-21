@@ -27,7 +27,7 @@ if errorlevel 1 (
 )
 
 REM ---------------------------------------------------------------------
-REM 2) Validar parametros: shard M y N
+REM 2) Validar parametros: shard M y N + bucket
 REM ---------------------------------------------------------------------
 set "SHARD_M=%~1"
 set "SHARD_N=%~2"
@@ -38,8 +38,18 @@ if "%SHARD_N%"=="" set /p SHARD_N="Total shards N (ej. 3): "
 if "%SHARD_M%"=="" goto bad_shard
 if "%SHARD_N%"=="" goto bad_shard
 
+REM Nombre del bucket GCS privado donde viven los PDFs + bootstrap.
+REM Configurable via variable GCS_BUCKET_NAME (sin prefijo gs://).
+if "%GCS_BUCKET_NAME%"=="" set /p GCS_BUCKET_NAME="Nombre bucket GCS (sin gs://, ej. my-onpe-bucket): "
+if "%GCS_BUCKET_NAME%"=="" (
+    echo [ERROR] Se requiere nombre de bucket GCS.
+    pause
+    exit /b 1
+)
+
 echo.
 echo [INFO] Shard asignado: %SHARD_M%/%SHARD_N%
+echo [INFO] Bucket GCS: gs://%GCS_BUCKET_NAME%
 echo.
 
 REM ---------------------------------------------------------------------
@@ -139,8 +149,8 @@ REM ---------------------------------------------------------------------
 if not exist "%REPO_DIR%\data\curated" mkdir "%REPO_DIR%\data\curated"
 
 echo.
-echo [INFO] Descargando curated parquets desde gs://onpe-eg2026-pdfs-v2/bootstrap/curated/
-%UV_BIN% run python -c "from google.cloud import storage; c=storage.Client(); b=c.bucket('onpe-eg2026-pdfs-v2'); [b.blob(f'bootstrap/curated/{f}').download_to_filename(f'data/curated/{f}') or print(f'  ok  {f}') for f in ['actas_cabecera.parquet','actas_archivos.parquet']]"
+echo [INFO] Descargando curated parquets desde gs://%GCS_BUCKET_NAME%/bootstrap/curated/
+%UV_BIN% run python -c "import os; from google.cloud import storage; bucket=os.environ['GCS_BUCKET_NAME']; c=storage.Client(); b=c.bucket(bucket); [b.blob(f'bootstrap/curated/{f}').download_to_filename(f'data/curated/{f}') or print(f'  ok  {f}') for f in ['actas_cabecera.parquet','actas_archivos.parquet']]"
 if errorlevel 1 (
     echo [ERROR] Fallo descargar parquets. Verificar credencial y red.
     pause
@@ -170,7 +180,7 @@ echo ==========================================================
 echo.
 
 %UV_BIN% run python scripts\download_pdfs.py ^
-    --gcs-bucket gs://onpe-eg2026-pdfs-v2 ^
+    --gcs-bucket gs://%GCS_BUCKET_NAME% ^
     --rps 5 --concurrency 10 ^
     --shard %SHARD_M%/%SHARD_N%
 

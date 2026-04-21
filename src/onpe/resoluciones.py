@@ -40,6 +40,13 @@ log = logging.getLogger(__name__)
 BASE_URL = "https://busquedas.elperuano.pe"
 DISPOSITIVO_PATH = "/dispositivo/NL/{op}"
 
+# Validación del op_id (anti path-traversal): sólo alfanumérico + `.` + `-`.
+# Ejemplos válidos: "2388220-1", "2501055-1". Inválidos: "../../evil", "op with space".
+_OP_ID_RE = re.compile(r"^[\w.\-]+$")
+
+# Tamaño mínimo razonable para PDF válido. Por debajo asumimos error de servidor.
+_MIN_PDF_BYTES = 1024
+
 DEFAULT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -78,6 +85,16 @@ class Resolucion:
     notas: str  # descripción del curador (del YAML)
 
 
+def _safe_https_url(raw: object) -> str:
+    """Retorna la URL sólo si comienza con https://, sino cadena vacía.
+
+    Defensa contra SSRF: si El Peruano devolviera un esquema file:// u otro
+    no-HTTP, el downloader podría leer archivos locales o hacer requests internos.
+    """
+    s = str(raw or "")
+    return s if s.startswith("https://") else ""
+
+
 def _yyyymmdd_to_iso(raw: str | None) -> str:
     """Convierte YYYYMMDD → YYYY-MM-DD; devuelve "" si malformado."""
     if not raw or len(raw) != 8 or not raw.isdigit():
@@ -108,8 +125,15 @@ def fetch_dispositivo(
 ) -> dict | None:
     """Fetch del HTML `/dispositivo/NL/{op}` y parse de `__NEXT_DATA__`.
 
-    Retorna el dict `pageProps.dispositivo` o None si no se encuentra.
+    Retorna el dict `pageProps.dispositivo` o None si no se encuentra. Loggea
+    cada rama de fallo con el motivo específico (status, estructura ausente,
+    error de red) para facilitar diagnóstico sin tener que correr con debug.
+
+    Valida `op_id` contra path traversal.
     """
+    if not _OP_ID_RE.match(op_id):
+        raise ValueError(f"op_id inválido (path traversal?): {op_id!r}")
+
     close_after = False
     if client is None:
         client = httpx.Client(headers=DEFAULT_HEADERS, timeout=timeout)
@@ -117,7 +141,11 @@ def fetch_dispositivo(
     try:
         url = BASE_URL + DISPOSITIVO_PATH.format(op=op_id)
         log.info("GET %s", url)
-        r = client.get(url)
+        try:
+            r = client.get(url)
+        except httpx.HTTPError as e:
+            log.warning("op=%s error de red (%s): %s", op_id, type(e).__name__, e)
+            return None
         if r.status_code != 200:
             log.warning("op=%s status=%s", op_id, r.status_code)
             return None
@@ -126,8 +154,23 @@ def fetch_dispositivo(
         if not m:
             log.warning("op=%s sin __NEXT_DATA__", op_id)
             return None
-        payload = json.loads(m.group(1))
-        return payload.get("props", {}).get("pageProps", {}).get("dispositivo")
+        try:
+            payload = json.loads(m.group(1))
+        except json.JSONDecodeError as e:
+            log.warning("op=%s __NEXT_DATA__ JSON inválido: %s", op_id, e)
+            return None
+        dispositivo = payload.get("props", {}).get("pageProps", {}).get("dispositivo")
+        if dispositivo is None:
+            # Estructura Next.js cambió (actualización del sitio). Log con keys
+            # disponibles para diagnosticar qué migró.
+            page_keys = list(payload.get("props", {}).get("pageProps", {}).keys())
+            log.warning(
+                "op=%s __NEXT_DATA__ parseado pero sin props.pageProps.dispositivo "
+                "(estructura Next.js cambió?). Keys disponibles: %s",
+                op_id,
+                page_keys,
+            )
+        return dispositivo
     finally:
         if close_after:
             client.close()
@@ -178,7 +221,9 @@ def build_resolucion(
         nombre_dispositivo=nombre,
         sumilla=str(raw.get("sumilla") or "") or entry_meta.get("sumilla", ""),
         url_html=BASE_URL + DISPOSITIVO_PATH.format(op=op_id),
-        url_pdf=str(raw.get("urlPDF") or ""),
+        # Sólo aceptamos url_pdf https:// para evitar SSRF si el API devolviera
+        # un esquema file:// o similar.
+        url_pdf=_safe_https_url(raw.get("urlPDF")),
         sector=str(raw.get("sector") or "") or None,
         rubro=str(raw.get("rubro") or "") or None,
         tag_proceso=entry_meta.get("tag_proceso", "EG2026"),
@@ -191,7 +236,14 @@ def build_resolucion(
 def download_pdf(
     url: str, out_file: Path, *, client: httpx.Client | None = None, timeout: float = 60.0
 ) -> int:
-    """Descarga un PDF y lo guarda en `out_file`. Retorna bytes escritos."""
+    """Descarga un PDF y lo guarda en `out_file`. Retorna bytes escritos.
+
+    Rechaza URLs no-HTTPS (anti SSRF) y PDFs sospechosamente pequeños que
+    típicamente indican un error de servidor disfrazado como 200 OK (página
+    de error en vez del PDF real).
+    """
+    if not url.startswith("https://"):
+        raise ValueError(f"url_pdf no https:// (rechazada): {url[:80]!r}")
     out_file.parent.mkdir(parents=True, exist_ok=True)
     close_after = False
     if client is None:
@@ -205,6 +257,12 @@ def download_pdf(
                 for chunk in r.iter_bytes(chunk_size=256 * 1024):
                     f.write(chunk)
                     total += len(chunk)
+        if total < _MIN_PDF_BYTES:
+            # Servidor devolvió 200 pero body muy pequeño → error disfrazado.
+            out_file.unlink(missing_ok=True)
+            raise ValueError(
+                f"PDF sospechosamente pequeño ({total} bytes < {_MIN_PDF_BYTES}): {url}"
+            )
         log.info("PDF descargado %s (%s bytes)", out_file.name, f"{total:,}")
         return total
     finally:

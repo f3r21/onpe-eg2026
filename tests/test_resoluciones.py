@@ -13,8 +13,10 @@ from onpe.resoluciones import (
     DISPOSITIVO_PATH,
     Resolucion,
     _infer_institucion,
+    _safe_https_url,
     _yyyymmdd_to_iso,
     build_resolucion,
+    download_pdf,
     fetch_dispositivo,
     parse_registry_yaml,
 )
@@ -276,3 +278,63 @@ def test_resolucion_es_inmutable():
     )
     with pytest.raises(AttributeError):
         r.institucion = "JNE"  # type: ignore[misc]
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Validaciones de seguridad (audit pre-release)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "bad_op",
+    [
+        "../../evil",
+        "op with space",
+        "op/slash",
+        "op?query=1",
+        "op#frag",
+        "",
+    ],
+)
+def test_fetch_dispositivo_rechaza_op_id_path_traversal(bad_op):
+    """op_id con caracteres peligrosos debe abortar antes del GET."""
+    with pytest.raises(ValueError, match="op_id inválido"):
+        fetch_dispositivo(bad_op)
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        (
+            "https://busquedas.elperuano.pe/api/file.PDF",
+            "https://busquedas.elperuano.pe/api/file.PDF",
+        ),
+        ("http://insecure.example.com/file.pdf", ""),
+        ("file:///etc/passwd", ""),
+        ("", ""),
+        (None, ""),
+        ("javascript:alert(1)", ""),
+    ],
+)
+def test_safe_https_url(raw, expected):
+    assert _safe_https_url(raw) == expected
+
+
+def test_download_pdf_rechaza_url_no_https(tmp_path):
+    with pytest.raises(ValueError, match="no https://"):
+        download_pdf("http://insecure.example.com/x.pdf", tmp_path / "out.pdf")
+
+
+def test_download_pdf_rechaza_pdf_sospechosamente_pequeno(tmp_path):
+    """Servidor devuelve 200 con body <1024 bytes → abort + archivo borrado."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # 500 bytes — debajo del mínimo 1024.
+        return httpx.Response(200, content=b"x" * 500)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        out = tmp_path / "mini.pdf"
+        with pytest.raises(ValueError, match="sospechosamente pequeño"):
+            download_pdf("https://mock.test/x.pdf", out, client=client)
+    # El archivo parcial debió borrarse.
+    assert not out.exists()

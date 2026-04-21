@@ -307,12 +307,24 @@ def aggregate_vigencia_by_ubigeo(lazy_vig: pl.LazyFrame) -> pl.DataFrame:
 
 
 def merge_base_with_vigencia(base_df: pl.DataFrame, vig_df: pl.DataFrame) -> pl.DataFrame:
-    """Une la tabla base con el desglose de vigencia por ubigeo_reniec+pais_codigo."""
-    return base_df.join(
+    """Une la tabla base con el desglose de vigencia por ubigeo_reniec+pais_codigo.
+
+    `left join + fill_null(0)` hace `vigentes=0, caducados=0` indistinguible de
+    "distrito sin cobertura en OPP-4". Loggeamos el count para trazabilidad.
+    """
+    merged = base_df.join(
         vig_df,
         on=["ubigeo_reniec", "pais_codigo"],
         how="left",
-    ).with_columns(
+    )
+    sin_vigencia = merged.filter(pl.col("vigentes").is_null()).height
+    if sin_vigencia > 0:
+        log.warning(
+            "%d distritos/países sin cobertura en OPP-4 (vigentes=0/caducados=0 "
+            "no es necesariamente real — podría ser `left join` sin match)",
+            sin_vigencia,
+        )
+    return merged.with_columns(
         [
             pl.col("vigentes").fill_null(0),
             pl.col("caducados").fill_null(0),

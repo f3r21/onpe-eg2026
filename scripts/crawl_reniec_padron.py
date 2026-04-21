@@ -51,8 +51,9 @@ def _resolve_csv_paths(raw_dir: Path, trimestre: str) -> tuple[Path, Path]:
     if canonical_base.exists() and canonical_vig.exists():
         return canonical_base, canonical_vig
 
-    legacy_base = raw_dir / f"padron_{trimestre.replace('_', '_')}.01.csv"
-    legacy_vig = raw_dir / f"padron_{trimestre.replace('_', '_')}.02_vigencia.csv"
+    # Naming legacy de runs previos: `padron_YYYY_MM.01.csv` y `.02_vigencia.csv`.
+    legacy_base = raw_dir / f"padron_{trimestre}.01.csv"
+    legacy_vig = raw_dir / f"padron_{trimestre}.02_vigencia.csv"
     if legacy_base.exists() and legacy_vig.exists():
         return legacy_base, legacy_vig
 

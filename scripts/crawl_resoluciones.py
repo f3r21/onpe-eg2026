@@ -41,7 +41,7 @@ from onpe.storage import DATA_DIR, DIM_DIR, write_dim
 
 log = logging.getLogger("crawl_resoluciones")
 
-DEFAULT_REGISTRY = DATA_DIR.parent / "data" / "registry" / "resoluciones_eg2026.yaml"
+DEFAULT_REGISTRY = DATA_DIR / "registry" / "resoluciones_eg2026.yaml"
 DEFAULT_PDF_DIR = DATA_DIR / "raw" / "resoluciones"
 
 
@@ -63,10 +63,13 @@ def crawl(registry_path: Path, pdf_dir: Path, download: bool) -> list[Resolucion
                 if pdf_path.exists() and pdf_path.stat().st_size > 0:
                     log.info("PDF existe, skip: %s", pdf_path.name)
                 else:
+                    # Catch amplio: timeouts, IO errors, value errors por PDF
+                    # sospechoso. Preferimos continuar el crawl y flaggear
+                    # que abortar el batch entero por una resolución.
                     try:
                         download_pdf(resolucion.url_pdf, pdf_path, client=client)
-                    except httpx.HTTPError as e:
-                        log.warning("op=%s PDF falló: %s", op, e)
+                    except Exception as e:
+                        log.warning("op=%s PDF falló (%s): %s", op, type(e).__name__, e)
 
             # Jitter suave entre requests para no tickear rate-limits del WAF.
             time.sleep(0.5)
