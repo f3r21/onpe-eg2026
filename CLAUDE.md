@@ -55,8 +55,11 @@ scripts/
   snapshot_aggregates.py          # fase 3a — barato, repetible
   snapshot_actas.py               # fase 3b — 463k actas, ~8h @ 15 rps, resumable, toma lock
   daily_refresh.py                # pipeline incremental solo P/E (~1h20m @ 15 rps), toma lock
-  build_curated.py                # dedup max(run_ts_ms), streaming sink_parquet, auto-enrich (--no-enrich opt)
+  build_curated.py                # dedup max(run_ts_ms), streaming sink_parquet, auto-enrich (--no-enrich opt), genera actas_votos_tidy.parquet
   enrich_curated.py               # join con dim/mesas → idAmbitoGeografico + idDistritoElectoral
+  crawl_reniec_padron.py          # scraper RENIEC padrón Q1 2026 → data/dim/padron.parquet
+  export_csv.py                   # exporter CSV con filtros (eleccion/DE/depto/partido) — periodistas/analistas
+  detect_anomalies.py             # detector baseline 7 reglas → data/analytics/anomalias.parquet + resumen .md/.json
   dq_check.py                     # DQ Nivel 1 + 2 + 3 (--nivel 1|2|3|0)
   smoke.py                        # end-to-end validation — golden path del API
   dashboard.py                    # HTML estático salud del pipeline → data/dashboard/index.html
@@ -254,6 +257,12 @@ Estado al 2026-04-20:
 **Completado 2026-04-20 (PR #6)**:
 - Padrón RENIEC integrado via datosabiertos.gob.pe. `src/onpe/reniec_padron.py` + `scripts/crawl_reniec_padron.py` + 12 tests. Output `data/dim/padron.parquet` (2,039 filas, 27.23M electores Q1 2026 delta 0.46% vs oficial JNE). Columnas: ubigeo_reniec/inei, demografía (sexo, rangos etarios), DNI vigencia.
 - **Finding ubigeo**: ONPE.ubigeoDistrito ≡ RENIEC.UBIGEO_RENIEC (100% match). Quien diverge es INEI. Join ONPE ↔ RENIEC es directo vía `ubigeoDistrito ↔ ubigeo_reniec`. Corrige la suposición previa que agrupaba ONPE con INEI/RENIEC.
+
+**Completado 2026-04-20 (PR #8)**:
+- `scripts/export_csv.py`: exporter CSV con filtros (eleccion/DE/depto/provincia/distrito/partido/ambito/estado). 3 formatos: `mesa-partido` (long), `resumen-distrito` (agregado), `cabecera` (compacto). Soporta gzip.
+- `scripts/build_curated.py` extendido: genera `data/curated/actas_votos_tidy.parquet` (18.6M filas × 17 cols consumer-friendly) como paso final automático post-enrich.
+- `scripts/detect_anomalies.py`: detector baseline con 7 reglas (3 CRITICAL + 2 HIGH + 2 MEDIUM). Cross-check contra padrón RENIEC. Baseline dataset 2026-04-20: **0 CRITICAL, 0 HIGH, 4,600 MEDIUM** (outliers estadísticos, DQ total sano).
+- 20 tests nuevos. Full suite 142/142 PASS.
 
 **Deferred (fuera de scope del 100%)**:
 - A0 daemon formal aggregate_loop.py (shim actual cumple SLI)

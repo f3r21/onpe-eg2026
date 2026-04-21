@@ -209,7 +209,64 @@ def main() -> int:
         enriched.write_parquet(tmp, compression="zstd")
         tmp.replace(CURATED_DIR / "actas_cabecera.parquet")
         logger.info("curated enriquecido: +%d cols", len(enriched.columns) - len(df_cab.columns))
+
+        # Tabla tidy long-format: vista consumer-friendly con las 14 columnas más
+        # relevantes para análisis académico/ML y visualización. Derivada del join
+        # votos×cabecera (post-enrich) para llevar el contexto geográfico con cada fila.
+        build_votos_tidy()
     return 0
+
+
+def build_votos_tidy() -> int:
+    """Genera actas_votos_tidy.parquet: long format consumer-friendly.
+
+    Subset de actas_votos con columnas enriquecidas desde cabecera y renombrado
+    semántico (descripcion → partido). Optimizada para consumers que NO quieren
+    hacer el join manualmente.
+    """
+    votos = pl.scan_parquet(CURATED_DIR / "actas_votos.parquet")
+    cab = pl.scan_parquet(CURATED_DIR / "actas_cabecera.parquet").select(
+        [
+            "idActa",
+            "codigoMesa",
+            "ubigeoDepartamento",
+            "ubigeoProvincia",
+            "ubigeoDistrito",
+            "nombreDistrito",
+            "idAmbitoGeografico",
+            "idDistritoElectoral",
+            "codigoEstadoActa",
+            "totalVotosEmitidos",
+            "totalVotosValidos",
+            "totalElectoresHabiles",
+        ]
+    )
+    tidy = votos.join(cab, on="idActa", how="inner", suffix="_cab").select(
+        [
+            "idActa",
+            "codigoMesa",
+            "idEleccion",
+            "idAmbitoGeografico",
+            "idDistritoElectoral",
+            "ubigeoDepartamento",
+            "ubigeoProvincia",
+            "ubigeoDistrito",
+            "nombreDistrito",
+            "codigoEstadoActa",
+            pl.col("descripcion").alias("partido"),
+            "ccodigo",
+            "es_especial",
+            "nvotos",
+            "totalVotosEmitidos",
+            "totalVotosValidos",
+            "totalElectoresHabiles",
+        ]
+    )
+    out = CURATED_DIR / "actas_votos_tidy.parquet"
+    tidy.sink_parquet(out, compression="zstd")
+    n = pl.scan_parquet(out).select(pl.len()).collect().item()
+    logger.info("tidy: %d filas -> %s (%.1f MB)", n, out, out.stat().st_size / 1e6)
+    return n
 
 
 if __name__ == "__main__":
