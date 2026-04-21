@@ -50,13 +50,16 @@ Los signed URLs retornados por `/actas/file?id=<archivoId>` apuntan al bucket S3
 
 **Volumen**: ~811,984 archivoIds únicos, ~1 TB total.
 
-### 2.4 Fuentes oficiales adicionales (roadmap)
+### 2.4 Fuentes oficiales adicionales
 
-Documentadas en `fuentes_datos.md`, pendientes de scraper:
+**Integrado en v1.0**:
+
+- **RENIEC Padrón Electoral 2026** — dataset OPP-16 de RENIEC descargado de `datosabiertos.gob.pe` (CSVs `BD_DAbiertos_16_OPP_2026_03.01.csv` base + `_03.02.csv` vigencia del Q1 2026). Agregado a `data/dim/padron.parquet` (2,039 filas: 1,892 distritos Perú + 147 países extranjero, 27.23M electores ≥18, delta 0.46% vs oficial JNE 27.36M). Implementación en `src/onpe/reniec_padron.py`.
+
+**Roadmap v1.1** (pendientes de scraper):
 
 - **JNE Plataforma Electoral** — candidatos EG2026 (DNI, nombre, partido oficial)
-- **RENIEC Padrón Electoral 2026** — 27.36M electores por distrito
-- **datosabiertos.gob.pe** — CSV oficial post-proclamación (~4 semanas post-JNE)
+- **datosabiertos.gob.pe** — CSV oficial ONPE post-proclamación (~4 semanas post-JNE)
 - **El Peruano** — resoluciones oficiales del proceso
 - **ONPE comunicados/POE** — Plan Operativo Electoral
 
@@ -201,13 +204,9 @@ El campo viene como `"23.78"` (string con 2 decimales). Se preserva así para no
 
 240 actas con `codigoEstadoActa=C` + `estadoActa=N` + `detalle=[]`. **Clasificadas como mesa_no_instalada** (48 mesas del voto exterior × 5 elecciones que nunca se instalaron físicamente). **Excluidas del denominador** en el check de identidades contables (el inner join con votos automáticamente las descarta). Reporte en `data/curated/actas_anomalia_240_investigacion.parquet`.
 
-### 7.4 Ubigeo ONPE ≠ Ubigeo INEI/RENIEC
+### 7.4 Ubigeo ONPE ≡ RENIEC, diverge de INEI
 
-ONPE usa su propio esquema de ubigeos, distinto del INEI/RENIEC. Ejemplo:
-- **Lima en ONPE**: depto 14 (orden alfabético ignorando Callao)
-- **Lima en INEI**: depto 15
-
-Para joins contra padrón RENIEC se necesita tabla cross-walk (pendiente v1.1).
+Verificación empírica (2026-04-20): **ONPE.ubigeo coincide 100% con RENIEC.UBIGEO_RENIEC** (1,892/1,892 distritos matchean directamente). Quien diverge es INEI. Ejemplo Lima: ONPE = RENIEC = depto 14; INEI = depto 15. Por lo tanto el join `actas_cabecera.ubigeoDistrito ↔ padron.ubigeo_reniec` es directo sin mapping table. Para cruces contra INEI el parquet padron incluye la crosswalk como columna `ubigeo_inei`.
 
 ### 7.5 Distrito Electoral mapping
 
