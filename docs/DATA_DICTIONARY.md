@@ -126,6 +126,38 @@ Eventos de transición de estado por acta. Permite reconstruir el historial temp
 
 ---
 
+## `actas_votos_tidy.parquet` (~18.6M filas)
+
+Vista consumer-friendly de `actas_votos` ya enriquecida con el contexto geográfico desde `actas_cabecera`. Pensada para análisis académico/ML y visualización directa sin join manual. Columna `descripcion` renombrada a `partido` para semántica más obvia.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `idActa` | Int64 | FK a cabecera. |
+| `codigoMesa` | String | Código mesa 6-dig zero-padded. |
+| `idEleccion` | Int64 | 10/12/13/14/15. |
+| `idAmbitoGeografico` | Int64 | 1=Perú, 2=Exterior. |
+| `idDistritoElectoral` | Int64 | 1..27. |
+| `ubigeoDepartamento`, `ubigeoProvincia`, `ubigeoDistrito` | String | Ubigeos zero-padded. |
+| `nombreDistrito` | String | Nombre oficial ONPE. |
+| `codigoEstadoActa` | String | C/E/P/N. |
+| `partido` | String | Renamed desde `descripcion`. |
+| `ccodigo` | String | zero-padded 8-dig. |
+| `es_especial` | Boolean | True para BLANCOS/NULOS/IMPUGNADOS. |
+| `nvotos` | Int64 | Votos de la agrupación en la mesa. |
+| `totalVotosEmitidos`, `totalVotosValidos`, `totalElectoresHabiles` | Int64 | Totales de la mesa (redundantes para análisis directo). |
+
+Ejemplo:
+```python
+import polars as pl
+tidy = pl.scan_parquet("data/curated/actas_votos_tidy.parquet")
+# Top 5 partidos nacional en Presidencial
+tidy.filter(pl.col("idEleccion") == 10).group_by("partido").agg(
+    pl.col("nvotos").sum()
+).sort("nvotos", descending=True).head(5).collect()
+```
+
+---
+
 ## `actas_archivos.parquet`
 
 Metadata de los PDFs escaneados adjuntos a cada acta (típicamente 2 por mesa: acta de escrutinio + acta de sufragio/resolución). ~811k filas.
