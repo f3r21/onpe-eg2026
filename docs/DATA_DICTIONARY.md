@@ -126,6 +126,38 @@ Eventos de transición de estado por acta. Permite reconstruir el historial temp
 
 ---
 
+## `actas_votos_tidy.parquet` (~18.6M filas)
+
+Vista consumer-friendly de `actas_votos` ya enriquecida con el contexto geográfico desde `actas_cabecera`. Pensada para análisis académico/ML y visualización directa sin join manual. Columna `descripcion` renombrada a `partido` para semántica más obvia.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `idActa` | Int64 | FK a cabecera. |
+| `codigoMesa` | String | Código mesa 6-dig zero-padded. |
+| `idEleccion` | Int64 | 10/12/13/14/15. |
+| `idAmbitoGeografico` | Int64 | 1=Perú, 2=Exterior. |
+| `idDistritoElectoral` | Int64 | 1..27. |
+| `ubigeoDepartamento`, `ubigeoProvincia`, `ubigeoDistrito` | String | Ubigeos zero-padded. |
+| `nombreDistrito` | String | Nombre oficial ONPE. |
+| `codigoEstadoActa` | String | C/E/P/N. |
+| `partido` | String | Renamed desde `descripcion`. |
+| `ccodigo` | String | zero-padded 8-dig. |
+| `es_especial` | Boolean | True para BLANCOS/NULOS/IMPUGNADOS. |
+| `nvotos` | Int64 | Votos de la agrupación en la mesa. |
+| `totalVotosEmitidos`, `totalVotosValidos`, `totalElectoresHabiles` | Int64 | Totales de la mesa (redundantes para análisis directo). |
+
+Ejemplo:
+```python
+import polars as pl
+tidy = pl.scan_parquet("data/curated/actas_votos_tidy.parquet")
+# Top 5 partidos nacional en Presidencial
+tidy.filter(pl.col("idEleccion") == 10).group_by("partido").agg(
+    pl.col("nvotos").sum()
+).sort("nvotos", descending=True).head(5).collect()
+```
+
+---
+
 ## `actas_archivos.parquet`
 
 Metadata de los PDFs escaneados adjuntos a cada acta (típicamente 2 por mesa: acta de escrutinio + acta de sufragio/resolución). ~811k filas.
@@ -172,6 +204,53 @@ Catálogo de provincias.
 ### `dim/locales.parquet` (10,553 filas)
 
 Locales de votación físicos (colegios, universidades, centros comunales).
+
+### `dim/padron.parquet` (2,039 filas)
+
+Padrón electoral RENIEC Q1 2026 agregado por distrito (Perú) + país (voto exterior). Fuente oficial: [datosabiertos.gob.pe OPP-16](https://www.datosabiertos.gob.pe/dataset/reniec-poblaci%C3%B3n-identificada-con-dni-registro-nacional-de-identificaci%C3%B3n-y-estado-civil). Filtrado Edad ≥ 18. Total 27,230,711 electores (delta 0.46% vs 27,356,578 oficiales JNE).
+
+| columna | tipo | descripción |
+|---|---|---|
+| `ubigeo_reniec` | String | Ubigeo RENIEC 6-dígit zero-padded. **Coincide con ONPE.ubigeoDistrito** (join directo). Vacío para rows Extranjero. |
+| `ubigeo_inei` | String | Ubigeo INEI 6-dígit (diverge de RENIEC en Lima=15 vs 14). Vacío para Extranjero. |
+| `residencia` | String | `Nacional` (Perú) o `Extranjero` |
+| `pais_codigo` | String | Código país RENIEC 4-dígit. Solo pobla cuando `residencia=Extranjero`. |
+| `pais_nombre` | String | Nombre del país (Perú para nacional, nombre específico para extranjero). |
+| `departamento`, `provincia`, `distrito` | String | Nombres geográficos oficiales (solo nacional). |
+| `total_electores` | Int64 | Total electores ≥18 años del ubigeo (Vigente + Caducado). |
+| `hombres`, `mujeres` | Int64 | Desglose por sexo. Suma = `total_electores`. |
+| `dni_electronico`, `dni_convencional` | Int64 | Desglose por tipo de DNI. Suma = `total_electores`. |
+| `rango_18_25`, `rango_26_35`, `rango_36_45`, `rango_46_60`, `rango_61_plus` | Int64 | Bandas etarias. Suma = `total_electores`. |
+| `vigentes`, `caducados` | Int64 | Del dataset OPP-4 (vigencia DNI). Suma = `total_electores`. |
+| `fuente_trimestre` | String | Trimestre RENIEC del snapshot (ej. `"2026_03"`). |
+
+Join con actas ONPE:
+```python
+import polars as pl
+actas = pl.read_parquet("data/curated/actas_cabecera.parquet")
+padron = pl.read_parquet("data/dim/padron.parquet")
+cobertura = actas.join(padron, left_on="ubigeoDistrito", right_on="ubigeo_reniec", how="left")
+```
+
+### `dim/resoluciones.parquet` (registry curado EG2026)
+
+Registro estructurado de resoluciones oficiales landmark del proceso EG2026 (cronograma, reglamentos primarias, padrón, voto digital, miembros de mesa exterior). Fuente: Diario Oficial El Peruano — páginas `busquedas.elperuano.pe/dispositivo/NL/{op}`. PDFs descargados a `data/raw/resoluciones/{op}.pdf`. Editable en `data/registry/resoluciones_eg2026.yaml`: añadir el `op` del buscador El Peruano + tags curados y correr `scripts/crawl_resoluciones.py` para hidratar metadata en vivo.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `op_id` | String | ID del dispositivo en El Peruano (ej. `"2388220-1"`). PK. |
+| `fecha_publicacion` | String | ISO `YYYY-MM-DD` (normalizado desde `YYYYMMDD` del API). |
+| `institucion` | String | `JNE`, `ONPE`, `RENIEC`, `JEE`, …. Campo directo del API o inferido del `nombreDispositivo`. |
+| `tipo_dispositivo` | String | `RESOLUCION`, `RESOLUCION JEFATURAL`, …. |
+| `nombre_dispositivo` | String | Ej. `"N° 0126-2025-JNE"` o `"N° 000063-2025-JN/ONPE"`. |
+| `sumilla` | String | Descripción corta (título oficial del documento). |
+| `url_html` | String | URL a la página de detalle en `busquedas.elperuano.pe`. |
+| `url_pdf` | String | URL directa del PDF oficial. |
+| `sector`, `rubro` | String (nullable) | Categorización interna de El Peruano. |
+| `tag_proceso` | String | Etiqueta curada: `EG2026`, `EG2026_PRIMARIAS`, `EG2026_EXTERIOR`. |
+| `tag_categoria` | String | Etiqueta curada: `cronograma`, `padron`, `reglamento_primarias`, `voto_digital`, `miembros_mesa`, `observacion`, `cedula`. |
+| `url_ok` | Boolean | True si el scraper pudo hidratar metadata en vivo. False → data del YAML fallback. |
+| `notas` | String | Notas del curador explicando relevancia de la resolución. |
 
 ---
 

@@ -559,6 +559,14 @@ async def snapshot_actas(
             if err is not None:
                 ck.failed.append({"acta_id": acta_id, "error": err})
                 stats["fallidas"] += 1
+                # Primeras 10 fallas individuales van al log real-time. Después
+                # solo el counter agregado, para no saturar stdout ante fallos masivos.
+                if stats["fallidas"] <= 10:
+                    log.warning("fallo acta_id=%s: %s", acta_id, err)
+                elif stats["fallidas"] == 11:
+                    log.warning(
+                        "(>10 fallos; suprimiendo mensajes individuales — ver checkpoint.failed)"
+                    )
                 continue
             ck.completed_acta_ids.add(acta_id)
             if cab is None:
