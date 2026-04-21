@@ -57,6 +57,7 @@ scripts/
   daily_refresh.py                # pipeline incremental solo P/E (~1h20m @ 15 rps), toma lock
   build_curated.py                # dedup max(run_ts_ms), streaming sink_parquet, auto-enrich (--no-enrich opt)
   enrich_curated.py               # join con dim/mesas → idAmbitoGeografico + idDistritoElectoral
+  crawl_resoluciones.py           # scraper El Peruano resoluciones EG2026 → data/dim/resoluciones.parquet + PDFs
   dq_check.py                     # DQ Nivel 1 + 2 + 3 (--nivel 1|2|3|0)
   smoke.py                        # end-to-end validation — golden path del API
   dashboard.py                    # HTML estático salud del pipeline → data/dashboard/index.html
@@ -251,8 +252,11 @@ Estado al 2026-04-20:
 - D3 datosabiertos: monitor + ingest skeleton + DQ Nivel 4 (2 checks). Flag `--nivel 4` en dq_check.py. Baseline 50 datasets guardados. Deferred hasta publicación ONPE real (~2-4 sem post-JNE).
 - D4 histórico EG2021: **REMOVIDO del scope (2026-04-20)**. Dataset v1.0 queda laser-focused en EG2026 primera vuelta con fuentes oficiales solamente. Histórico podrá publicarse aparte como dataset complementario `onpe-eg2021` si se retoma.
 
+**Completado 2026-04-20 (PR #7)**:
+- El Peruano resoluciones integrado vía `busquedas.elperuano.pe/dispositivo/NL/{op}`. `src/onpe/resoluciones.py` + `scripts/crawl_resoluciones.py` + `data/registry/resoluciones_eg2026.yaml` (7 landmarks: cronograma, reglamentos primarias, padrón, voto digital, miembros mesa exterior) + 26 tests. Output `data/dim/resoluciones.parquet` + PDFs descargados. **GraphQL paginado roto server-side** (error `'hits'`), usamos páginas detalle con `__NEXT_DATA__`. Registry expandible — agregar op IDs al YAML y re-correr.
+- ONPE POE: deferred (sitio `www.onpe.gob.pe/elecciones-generales-2026/` retorna 403 a scrapers plano).
+
 **Deferred (fuera de scope del 100%)**:
-- Padrón RENIEC por distrito (enriquecimiento posterior, confirmado con user)
 - A0 daemon formal aggregate_loop.py (shim actual cumple SLI)
 
 **Pendiente**:

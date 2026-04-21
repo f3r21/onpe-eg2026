@@ -73,11 +73,13 @@ El v1.0 captura solo ONPE (fuente primaria). **Pendientes** para v1.1+:
 | Fuente | Estado | Prioridad |
 |---|---|---|
 | JNE Plataforma Electoral (candidatos registrados) | scraper en roadmap | Alta |
-| RENIEC Padrón 2026 | scraper en roadmap | Alta |
-| El Peruano (resoluciones JNE) | scraper en roadmap | Media |
-| ONPE POE (Plan Operativo Electoral) | scraper en roadmap | Baja |
+| RENIEC Padrón 2026 | integrado v1.0 (dim/padron.parquet, 27.23M electores) | Alta |
+| El Peruano (resoluciones JNE/ONPE/RENIEC) | integrado v1.0 (dim/resoluciones.parquet, registry curado landmark) | Media |
+| ONPE POE (Plan Operativo Electoral) | deferred (sitio 403 blocked) | Baja |
 | JNE INFOgob (histórico) | excluido (requiere registro) | N/A |
 | JEE resoluciones por circunscripción | excluido (complejidad alta) | N/A |
+
+**Nota sobre El Peruano**: el endpoint GraphQL `/api/graphql` está introspectable pero las queries paginadas retornan error server-side (`'hits'`). El scraper usa las páginas de detalle `/dispositivo/NL/{op}` que sí responden. Por esta limitación, `dim/resoluciones.parquet` NO es un crawl exhaustivo del corpus JNE/ONPE 2026 sino un **registry curado** de resoluciones landmark (cronograma, reglamentos, padrón). Los consumers pueden ampliar el registry añadiendo `op` IDs al YAML.
 
 ## 9. Sesgos metodológicos
 
