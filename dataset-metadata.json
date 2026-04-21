@@ -47,7 +47,7 @@
     },
     {
       "path": "dim/",
-      "description": "Catálogos estáticos: mesas (92,766), distritos electorales (27), distritos (2,102), departamentos (30), provincias (273), locales de votación (10,553)."
+      "description": "Catálogos estáticos: mesas (92,766), distritos electorales (27), distritos (2,102), departamentos (30), provincias (273), locales de votación (10,553), padrón RENIEC Q1 2026 por distrito (2,039 filas, 27.23M electores con demografía)."
     },
     {
       "path": "geojson/",

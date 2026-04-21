@@ -173,6 +173,33 @@ Catálogo de provincias.
 
 Locales de votación físicos (colegios, universidades, centros comunales).
 
+### `dim/padron.parquet` (2,039 filas)
+
+Padrón electoral RENIEC Q1 2026 agregado por distrito (Perú) + país (voto exterior). Fuente oficial: [datosabiertos.gob.pe OPP-16](https://www.datosabiertos.gob.pe/dataset/reniec-poblaci%C3%B3n-identificada-con-dni-registro-nacional-de-identificaci%C3%B3n-y-estado-civil). Filtrado Edad ≥ 18. Total 27,230,711 electores (delta 0.46% vs 27,356,578 oficiales JNE).
+
+| columna | tipo | descripción |
+|---|---|---|
+| `ubigeo_reniec` | String | Ubigeo RENIEC 6-dígit zero-padded. **Coincide con ONPE.ubigeoDistrito** (join directo). Vacío para rows Extranjero. |
+| `ubigeo_inei` | String | Ubigeo INEI 6-dígit (diverge de RENIEC en Lima=15 vs 14). Vacío para Extranjero. |
+| `residencia` | String | `Nacional` (Perú) o `Extranjero` |
+| `pais_codigo` | String | Código país RENIEC 4-dígit. Solo pobla cuando `residencia=Extranjero`. |
+| `pais_nombre` | String | Nombre del país (Perú para nacional, nombre específico para extranjero). |
+| `departamento`, `provincia`, `distrito` | String | Nombres geográficos oficiales (solo nacional). |
+| `total_electores` | Int64 | Total electores ≥18 años del ubigeo (Vigente + Caducado). |
+| `hombres`, `mujeres` | Int64 | Desglose por sexo. Suma = `total_electores`. |
+| `dni_electronico`, `dni_convencional` | Int64 | Desglose por tipo de DNI. Suma = `total_electores`. |
+| `rango_18_25`, `rango_26_35`, `rango_36_45`, `rango_46_60`, `rango_61_plus` | Int64 | Bandas etarias. Suma = `total_electores`. |
+| `vigentes`, `caducados` | Int64 | Del dataset OPP-4 (vigencia DNI). Suma = `total_electores`. |
+| `fuente_trimestre` | String | Trimestre RENIEC del snapshot (ej. `"2026_03"`). |
+
+Join con actas ONPE:
+```python
+import polars as pl
+actas = pl.read_parquet("data/curated/actas_cabecera.parquet")
+padron = pl.read_parquet("data/dim/padron.parquet")
+cobertura = actas.join(padron, left_on="ubigeoDistrito", right_on="ubigeo_reniec", how="left")
+```
+
 ---
 
 ## GeoJSONs (`geojson/`)

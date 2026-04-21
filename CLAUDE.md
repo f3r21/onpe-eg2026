@@ -251,8 +251,11 @@ Estado al 2026-04-20:
 - D3 datosabiertos: monitor + ingest skeleton + DQ Nivel 4 (2 checks). Flag `--nivel 4` en dq_check.py. Baseline 50 datasets guardados. Deferred hasta publicación ONPE real (~2-4 sem post-JNE).
 - D4 histórico EG2021: **REMOVIDO del scope (2026-04-20)**. Dataset v1.0 queda laser-focused en EG2026 primera vuelta con fuentes oficiales solamente. Histórico podrá publicarse aparte como dataset complementario `onpe-eg2021` si se retoma.
 
+**Completado 2026-04-20 (PR #6)**:
+- Padrón RENIEC integrado via datosabiertos.gob.pe. `src/onpe/reniec_padron.py` + `scripts/crawl_reniec_padron.py` + 12 tests. Output `data/dim/padron.parquet` (2,039 filas, 27.23M electores Q1 2026 delta 0.46% vs oficial JNE). Columnas: ubigeo_reniec/inei, demografía (sexo, rangos etarios), DNI vigencia.
+- **Finding ubigeo**: ONPE.ubigeoDistrito ≡ RENIEC.UBIGEO_RENIEC (100% match). Quien diverge es INEI. Join ONPE ↔ RENIEC es directo vía `ubigeoDistrito ↔ ubigeo_reniec`. Corrige la suposición previa que agrupaba ONPE con INEI/RENIEC.
+
 **Deferred (fuera de scope del 100%)**:
-- Padrón RENIEC por distrito (enriquecimiento posterior, confirmado con user)
 - A0 daemon formal aggregate_loop.py (shim actual cumple SLI)
 
 **Pendiente**:

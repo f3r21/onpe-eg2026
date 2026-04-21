@@ -26,21 +26,21 @@ Para Senado (idEleccion 14, 15) y Diputados (idEleccion 13), donde cada lista ti
 
 **Marcadores del gap en el dataset**: la tabla `actas_votos` tiene columnas `cand_apellido_paterno` etc. que capturan **solo el primer candidato** de la lista. La tabla `actas_candidatos` expande el array completo de candidatos pero solo sus nombres/DNI — **no votos por candidato individual**.
 
-## 3. Padrón RENIEC no integrado
+## 3. Padrón RENIEC (integrado en v1.0 a nivel distrito)
 
-**Gap**: el cálculo de participación usa `totalElectoresHabiles` reportado por ONPE en cada acta. Esto es un número consistente mesa-por-mesa pero **no permite validar contra el padrón oficial RENIEC** ni desglosar por demografía (sexo, rango etario).
+**Estado**: `data/dim/padron.parquet` contiene el padrón electoral Q1 2026 de RENIEC (trimestre más cercano a la elección 2026-04-12) con 1,892 distritos Perú + 147 países extranjero. Total **27,230,711 electores** (delta 0.46% vs los 27,356,578 oficiales del JNE por lag del snapshot).
 
-**Implicaciones**:
-- No podemos calcular participación exacta por distrito = `votos_emitidos_distrito / padrón_hábil_distrito_RENIEC`.
-- No podemos segmentar voto por demografía.
+Fuente: [datosabiertos.gob.pe/dataset/reniec-poblaci%C3%B3n-identificada-con-dni](https://www.datosabiertos.gob.pe/dataset/reniec-poblaci%C3%B3n-identificada-con-dni-registro-nacional-de-identificaci%C3%B3n-y-estado-civil) (CSV oficial OPP-16, Q1 2026 published 2026-03-XX).
 
-**Roadmap v1.1**: scraper RENIEC (`data/dim/padron.parquet`) + tabla cross-walk ubigeos ONPE ↔ INEI/RENIEC.
+Columnas: `ubigeo_reniec`, `ubigeo_inei`, `residencia`, `pais_codigo`, `pais_nombre`, `departamento`, `provincia`, `distrito`, `total_electores`, `hombres`, `mujeres`, `dni_electronico`, `dni_convencional`, `rango_18_25 / 26_35 / 36_45 / 46_60 / 61_plus`, `vigentes`, `caducados`, `fuente_trimestre`.
 
-## 4. Ubigeos ONPE ≠ INEI/RENIEC (mapping deferred)
+**Gap remanente**: el padrón está a **nivel distrito**, no a nivel mesa. Para participación exacta mesa-por-mesa seguimos usando `totalElectoresHabiles` reportado por ONPE en cada acta (número ya consistente). Para análisis distrital cruzado con demografía el padron.parquet permite las consultas.
 
-ONPE usa su propio esquema de ubigeos (ej. Lima = depto 14), distinto del INEI/RENIEC (Lima = depto 15). Para joins con cualquier dataset externo (censos INEI, padrón RENIEC, histórico pre-2020), hace falta tabla de mapeo.
+## 4. Ubigeos ONPE vs INEI vs RENIEC
 
-**Estado**: la lógica para derivar `idDistritoElectoral` desde ubigeo ONPE está implementada (`src/onpe/enrich.py::compute_distrito_electoral`). Pero la tabla bidirectional ONPE ↔ INEI a nivel distrito NO existe en el repo.
+**Finding empírico (2026-04-20)**: contrario a la suposición inicial, **ONPE.ubigeo ≡ RENIEC.UBIGEO_RENIEC** (1,892/1,892 = 100% match, incluyendo Lima=14). Quien diverge es **INEI** (Lima=15). Por lo tanto el join ONPE ↔ RENIEC es directo vía `ubigeoDistrito` ↔ `ubigeo_reniec`.
+
+**Gap remanente**: para cruces con datasets INEI (censo nacional, mapas temáticos) se necesita mapping `ubigeo_reniec ↔ ubigeo_inei`. Ambos están disponibles en `data/dim/padron.parquet` como columnas, por lo que la crosswalk queda implícita en el dim.
 
 ## 5. Anomalía 240 actas C sin detalle
 
