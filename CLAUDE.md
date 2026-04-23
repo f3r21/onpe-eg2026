@@ -15,23 +15,27 @@ Ingesta de resultados de las **Elecciones Generales Perú 2026** (EG2026, 2026-0
 - **En scope**: pipeline ONPE completo (actas / votos / mesas / agregados / timeline / archivos / DQ). También fuentes electorales oficiales: datosabiertos.gob.pe, RENIEC padrón, archivo histórico ONPE, GeoJSONs.
 - **Fuera de scope** (el usuario los consigue): INFOgob, DECLARA, hojas de vida JNE, ingresos/bienes/antecedentes, partido político. Esos datos son capa de enriquecimiento que él inyecta; no dedicar ciclos a ellos.
 
-## Estado al 2026-04-19 (post-A4 re-snapshot full)
+## Estado al 2026-04-21
 
 | Activo | Filas | Cobertura | Nota |
 |---|---|---|---|
 | `dim/mesas.parquet` | 92,766 | 100% (90,223 Perú + 2,543 exterior) | OK |
 | `dim/distritos_electorales.parquet` | 27 | — | 1..26 + 27 (extranjero) |
+| `dim/padron.parquet` | 2,039 | 100% distritos | RENIEC Q1 2026, 27.23M electores, via datosabiertos.gob.pe |
+| `dim/resoluciones.parquet` | 7 | — | Resoluciones El Peruano EG2026 (cronograma, reglamentos, etc.) |
 | `dim/geojson/peruLow.json` | 26 features | — | 25 deptos + Callao + Lago Titicaca |
 | `curated/actas_cabecera.parquet` | 463,830 | 100% universo (92,766×5) | +5 cols enrich (idAmbitoGeografico, idDistritoElectoral, ubigeoDepartamento/Provincia, nombreDistrito) |
-| `curated/actas_votos.parquet` | 18,612,565 | **97.87% actas** (453,965 / 463,830) | 9,865 sin votos: 240 mesa-no-instalada + 9,625 Pendientes |
-| `curated/actas_linea_tiempo.parquet` | **1,270,390** | **274% row ratio** (1M+ eventos × 463k actas) | Cerrado gap (eran 439) |
-| `curated/actas_archivos.parquet` | **811,984** | **~95% actas** (metadata 2 PDFs/acta) | Cerrado gap (eran 60) |
-| `curated/actas_anomalia_240_investigacion.parquet` | 240 | — | 100% mesa_no_instalada (anomalia cerrada) |
+| `curated/actas_votos.parquet` | ~18.6M | ~98% actas | 9,865 sin votos: 240 mesa-no-instalada + P restantes |
+| `curated/actas_votos_tidy.parquet` | ~18.8M | consumer-friendly | long format, todas las cols etiquetadas |
+| `curated/actas_linea_tiempo.parquet` | 1,270,390 | ~100% actas | 1M+ eventos × 463k actas |
+| `curated/actas_archivos.parquet` | 811,984 | ~95% actas | metadata 2 PDFs/acta |
 | `facts/totales,mapa_calor,...` (aggregates) | N snapshots | — | Series temporales cada 15min (shim aggregate_loop) |
 
-**DQ al 2026-04-19 08:11:** **14/14 PASS** (5 N1 + 5 N2 + 4 N3). Identidades contables EXACTAS en 390,827 actas C con detalle. Drifts todos en µ% (≤0.001% presidencial, ≤2.16% Diputados por DE).
+**DQ al 2026-04-21 08:06:** **14/14 PASS**. E+P volátiles = 70,896 (15.3%). Daily refresh en curso.
 
-**Snapshot full completado en 8h 53m 50s** (2026-04-18 21:07 → 2026-04-19 07:43). ok=463830 vacias=0 fallidas=0.
+**PDFs GCS**: ~22% completado (163k/730k), checkpoint `1776777495929`, proceso PID 40176 corriendo.
+
+**Rama main**: 5028c03 — todos los PRs (#5-#8) mergeados al 2026-04-21.
 
 ## Arquitectura
 
@@ -233,55 +237,49 @@ Mantenimiento: si ONPE añade una columna nueva, validate_chunk emite WARNING pe
 
 ## Plan de trabajo hacia el 100%
 
-Estado al 2026-04-20:
+Estado al 2026-04-21 (todos los PRs mergeados en main):
 
-**Completadas 2026-04-18/19**:
-- A1 locks.py + integración (fcntl advisory en `data/state/.pipeline_lock`, 90% cov)
-- A2 shim aggregates cada 15min (nohup bash loop + caffeinate) — captura serie temporal irrecuperable
-- A4 re-snapshot FULL: 8h 53m 50s, 463,830 actas ok=100%, linea_tiempo y archivos poblados al ~100%
-- B1 enrich_curated.py + integración en build_curated. Mapeo ONPE-depto → DE: Callao=7, Lima split 15/16 (por provincia 1401), offsets +1/+2 validados
-- B2 DQ Nivel 3 (4 checks, 14/14 PASS post-A4)
-- B3 investigate_anomaly_240 ejecutado: **240/240 = mesa_no_instalada** (anomalia cerrada)
-- C1 tests pytest (77 passing, cov schemas=100%, geojson=97%, locks=90%, client=83%, pdfs=65%)
-- C2 schemas.py + validate_chunk en _flush_chunk (fail-fast drift) + jitter ±10% en _throttle
-- D2 GeoJSONs peruLow.json (26 deptos + Callao + Lago Titicaca). Provs no expuestas en SPA
-- F1 Dashboard `data/dashboard/index.html` autocontenido
+**DONE — infraestructura y datos base**:
+- A1 locks.py + integración (fcntl advisory `data/state/.pipeline_lock`)
+- A2 shim aggregates cada 15min (caffeinate loop, serie temporal irrecuperable capturada)
+- A4 re-snapshot FULL (463,830 actas, 8h 54m, ok=100%)
+- B1 enrich_curated.py → idAmbitoGeografico + idDistritoElectoral en curated
+- B2 DQ Nivel 3 (14/14 PASS)
+- B3 anomaly_240 → 240/240 mesa_no_instalada (cerrada)
+- C1 tests pytest 174/174 PASS (schemas=100%, geojson=97%, locks=90%, client=83%)
+- C2 schemas.py + validate_chunk fail-fast
+- D2 GeoJSONs peruLow.json
+- D3 datosabiertos.gob.pe monitor + DQ Nivel 4 (deferred hasta publicación ONPE)
+- D4 EG2021 removido del scope
+- F1 Dashboard HTML estático
 
-**En curso — descarga PDFs**:
-- D1 download_pdfs → GCS: running. Endpoint descubierto 2026-04-19 via DevTools: `GET /presentacion-backend/actas/file?id={archivoId}` → `{success, data: signed_s3_url}`. Destino: bucket GCS configurable vía `--gcs-bucket gs://<tu-bucket>` (proyecto y org del usuario). Framework streaming S3→GCS con `asyncio.to_thread` para upload sync (fix perf 0.6→3.2 PDFs/s). ETA ~2.6 días para 725,782 PDFs (~1 TB).
+**DONE — fuentes oficiales adicionales (PRs #5-#8 mergeados 2026-04-21)**:
+- RENIEC padrón Q1 2026: `dim/padron.parquet` (2,039 distritos, 27.23M electores)
+- El Peruano resoluciones: `dim/resoluciones.parquet` (7 landmarks EG2026)
+- POV features: `export_csv.py`, `actas_votos_tidy.parquet`, `detect_anomalies.py`
+- Release packaging: `prepare_release.py`, 5 notebooks, `generate_cover.py`, CHECKSUMS
+- Audit pre-release: 0 CRITICAL, 0 HIGH de 4 agentes. Credenciales rotadas.
 
-**Blocked — esperan input externo**:
-- D5 voto preferencial: sin endpoint API descubierto. Decisión user pendiente: (a) DevTools, (b) excluir, (c) OCR PDFs, (d) esperar datosabiertos.
+**EN CURSO**:
+- D1 PDFs GCS: 22% (163k/730k). Proceso PID 40176 (`--resume 1776777495929`). ETA ~22h.
+- daily_refresh PID 40357: actualizando 70,896 actas P/E.
 
-**Completado 2026-04-19 adicional**:
-- D3 datosabiertos: monitor + ingest skeleton + DQ Nivel 4 (2 checks). Flag `--nivel 4` en dq_check.py. Baseline 50 datasets guardados. Deferred hasta publicación ONPE real (~2-4 sem post-JNE).
-- D4 histórico EG2021: **REMOVIDO del scope (2026-04-20)**. Dataset v1.0 queda laser-focused en EG2026 primera vuelta con fuentes oficiales solamente. Histórico podrá publicarse aparte como dataset complementario `onpe-eg2021` si se retoma.
+**DESPUÉS del daily_refresh (~19:30 Lima)**:
+1. Verificar DQ: `uv run python scripts/dq_check.py`
+2. Re-correr anomaly detector: `uv run python scripts/detect_anomalies.py`
+3. Re-generar datasets/v1.0/ al final: `uv run python scripts/prepare_release.py --version v1.0`
 
-**Completado 2026-04-20 (PR #6)**:
-- Padrón RENIEC integrado via datosabiertos.gob.pe. `src/onpe/reniec_padron.py` + `scripts/crawl_reniec_padron.py` + 12 tests. Output `data/dim/padron.parquet` (2,039 filas, 27.23M electores Q1 2026 delta 0.46% vs oficial JNE). Columnas: ubigeo_reniec/inei, demografía (sexo, rangos etarios), DNI vigencia.
-- **Finding ubigeo**: ONPE.ubigeoDistrito ≡ RENIEC.UBIGEO_RENIEC (100% match). Quien diverge es INEI. Join ONPE ↔ RENIEC es directo vía `ubigeoDistrito ↔ ubigeo_reniec`. Corrige la suposición previa que agrupaba ONPE con INEI/RENIEC.
+**DESPUÉS de PDFs (~16:00 Lima Apr 22)**:
+1. Verificar cobertura GCS (contar objetos en bucket)
+2. Commit final del estado + tag v1.0 en GitHub
+3. Subir a Zenodo (DOI) → Kaggle → HuggingFace
 
-**Completado 2026-04-20 (PR #7)**:
-- El Peruano resoluciones integrado vía `busquedas.elperuano.pe/dispositivo/NL/{op}`. `src/onpe/resoluciones.py` + `scripts/crawl_resoluciones.py` + `data/registry/resoluciones_eg2026.yaml` (7 landmarks: cronograma, reglamentos primarias, padrón, voto digital, miembros mesa exterior) + 26 tests. Output `data/dim/resoluciones.parquet` + PDFs descargados. **GraphQL paginado roto server-side** (error `'hits'`), usamos páginas detalle con `__NEXT_DATA__`. Registry expandible — agregar op IDs al YAML y re-correr.
-- ONPE POE: deferred (sitio `www.onpe.gob.pe/elecciones-generales-2026/` retorna 403 a scrapers plano).
+**BLOQUEADO**:
+- D5 voto preferencial: sin endpoint API. Deferred post-datosabiertos.gob.pe.
+- JNE candidatos: captcha CAPTCHA_INVALID en plataformaelectoral.jne.gob.pe. Branch `feat/jne-candidatos-scraper` existe pero blocked.
 
-**Completado 2026-04-20 (PR #8)**:
-- `scripts/export_csv.py`: exporter CSV con filtros (eleccion/DE/depto/provincia/distrito/partido/ambito/estado). 3 formatos: `mesa-partido` (long), `resumen-distrito` (agregado), `cabecera` (compacto). Soporta gzip.
-- `scripts/build_curated.py` extendido: genera `data/curated/actas_votos_tidy.parquet` (18.6M filas × 17 cols consumer-friendly) como paso final automático post-enrich.
-- `scripts/detect_anomalies.py`: detector baseline con 7 reglas (3 CRITICAL + 2 HIGH + 2 MEDIUM). Cross-check contra padrón RENIEC. Baseline dataset 2026-04-20: **0 CRITICAL, 0 HIGH, 4,600 MEDIUM** (outliers estadísticos, DQ total sano).
-- 20 tests nuevos. Full suite 142/142 PASS.
-
-**Completado 2026-04-20 (PR #9)**:
-- `scripts/prepare_release.py`: empaqueta `datasets/<version>/` con `parquet/` (14 archivos 158 MB) + `csv/` (5 archivos útiles 131 MB) + `sqlite/onpe_eg2026.db` (5 tablas 128 MB, sin `actas_votos_tidy` por default para mantener tamaño) + `geojson/` (222 archivos 23 MB) + `docs/` + `notebooks/` + `CHECKSUMS.txt` + `README.md`. Total ~441 MB, dentro de límites Kaggle/Zenodo/HF.
-- `scripts/generate_cover.py`: render `docs/cover.png` 1200×600 matplotlib.
-- 5 notebooks demo: getting-started, participación, resultados presidencial, voto exterior, anomaly detection.
-- 6 tests nuevos. Full suite 174/174 PASS.
-
-**Deferred (fuera de scope del 100%)**:
+**Deferred**:
 - A0 daemon formal aggregate_loop.py (shim actual cumple SLI)
-
-**Pendiente**:
-- G1 finalizar README.md (Quickstart + troubleshooting)
 
 ## Recordatorios
 
